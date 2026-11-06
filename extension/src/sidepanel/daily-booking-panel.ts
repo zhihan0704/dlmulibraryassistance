@@ -1,7 +1,7 @@
 import type {DailySchedule} from '../core/daily-booking-scheduler';
-import type {DailyState} from '../storage/daily-booking-db';
+import type {DailySessionGate, DailyState} from '../storage/daily-booking-db';
 
-interface DailyReply {ok: boolean; state?: DailyState; next?: DailySchedule; error?: string}
+interface DailyReply {ok: boolean; state?: DailyState; session?: DailySessionGate; next?: DailySchedule; error?: string}
 const shanghaiTime = new Intl.DateTimeFormat('zh-CN', {timeZone: 'Asia/Shanghai', dateStyle: 'short', timeStyle: 'medium'});
 
 export function mountDailyBooking(section: HTMLElement): void {
@@ -10,6 +10,7 @@ export function mountDailyBooking(section: HTMLElement): void {
     <p>固定座位 · 每天北京时间 08:00 提醒预约次日。07:55 准备，08:01 核对个人预约。</p>
     <p class="waiting">当前为辅助模式。请在学校网页核对资格、时长及空闲状态，再亲自确认预约。</p>
     <p data-daily-summary>正在读取本机设置…</p>
+    <p class="waiting" data-daily-session role="status"></p>
     <p data-daily-result role="status"></p>
     <details data-daily-settings open><summary>固定座位与使用时段</summary>
       <p class="muted">先在学校网页打开对应区域，等座位加载后再核对并保存。保存后请启用提醒。</p>
@@ -32,6 +33,7 @@ export function mountDailyBooking(section: HTMLElement): void {
   const toggle = section.querySelector<HTMLButtonElement>('[data-daily-toggle]')!;
   const summary = section.querySelector<HTMLElement>('[data-daily-summary]')!;
   const outcome = section.querySelector<HTMLElement>('[data-daily-result]')!;
+  const sessionLine = section.querySelector<HTMLElement>('[data-daily-session]')!;
   const error = section.querySelector<HTMLElement>('[data-daily-error]')!;
   let enabled = false;
   let busy = false;
@@ -39,6 +41,8 @@ export function mountDailyBooking(section: HTMLElement): void {
 
   function render(reply: DailyReply, fill: boolean): void {
     const state = reply.state;
+    sessionLine.textContent = reply.session && reply.session.verifiedAt === undefined
+      ? '读取暂停。请人工完成学校登录，再打开个人预约页核验。' : '';
     configured = !!state;
     enabled = state?.config.enabled ?? false;
     toggle.textContent = enabled ? '暂停每日提醒' : '启用每日提醒';

@@ -1,208 +1,267 @@
-import {parsePersonalRecords} from './personal-records';
-import {EventMonitor, relevantMutation} from '../core/event-monitor';
-import {parseVisibleSeats} from './page-seat-reader';
-import {isTarget} from './page-detector';
+import {DlmuAdapter} from '../adapters/dlmu-adapter';
+import {relevantMutation} from '../core/event-monitor';
+import {summarizeSnapshot, type LiveSnapshot} from '../core/live-seats';
+import {domSeatKey, fingerprintDom, fingerprintNetwork, networkSeatKey, SeatObservationMonitor} from '../core/seat-observation';
+import {LIVE_CHANNEL, LIVE_MAX_AGE_MS, READY_CHANNEL, WANT_CHANNEL, type DomSummary, type LiveReply} from '../shared/live-monitor';
 import {readSeats} from './seat-reader';
-import {detectLogin} from './login-detector';
-import {normalizeReservePayload, summarizeSnapshot, type LiveSnapshot} from '../core/live-seats';
-import {readDailySeat} from '../core/daily-observations';
 
-const networkMonitor = new EventMonitor<{total:number;statuses:Record<string,number>}>(120000);
-const domMonitor = new EventMonitor<{total:number;statuses:Record<string,number>}>(120000);
-const LIVE_CHANNEL = 'lsa:reserve-response';
-const WANT_CHANNEL = 'lsa:want-buffer';
+const initialPage = DlmuAdapter.identifyPage(location.href);
+if (initialPage.kind !== 'OTHER' && initialPage.kind !== 'SSO') observePage();
 
-/** 实时快照只存在内存中：不落盘、不入日志，避免座位/预约数据长期驻留。 */
-let live: LiveSnapshot | null = null;
-let liveError: string | null = null;
-let hookSeen = false;
-let capturedCount = 0;
-/** 同一响应可能被「实时投递」与「缓冲重放」各送一次，按此键去重，避免计数虚高。 */
-let lastKey: string | null = null;
-
-interface DomSummary {
-  at: string;
-  route: string;
-  roomTitle: string;
-  count: number;
-  classCounts: Record<string, number>;
-  withFreeIntervals: number;
-}
-let lastDom: DomSummary | null = null;
-/** 上次成功读取的「内容指纹」，用于判断页面变化是否真的改变了数据 */
-let lastDomKey = '';
-
-function domKey(d: DomSummary): string {
-  return `${d.count}|${JSON.stringify(d.classCounts)}|${d.withFreeIntervals}`;
-}
-
-const STATUS_TOKENS = ['green', 'yellowGreen', 'yellow', 'gray', 'noopenlook', 'isCheckedSeat'];
-
-/** 只统计已知状态类，未知类归入 other，避免把布局类当状态。 */
-function countClasses(className: string): string[] {
-  const tokens = className.split(/\s+/).filter(Boolean);
-  const known = tokens.filter((t) => STATUS_TOKENS.includes(t));
-  return known.length ? known : ['other'];
-}
-
-function notifyRuntime(): void {
-  try {
-    // 侧边栏可能未打开：此处的「无人接收」属正常情况，忽略即可
-    void chrome.runtime.sendMessage({type: 'LIVE_UPDATE'}).catch(() => {});
-  } catch {
-    /* ignore */
-  }
-}
-
-function acceptLive(rawBody: string, at: string, url: string): void {
-  const key = `${at}|${url}`;
-  if (key === lastKey) return;
-  lastKey = key;
-  hookSeen = true;
-  capturedCount += 1;
-  try {
-    const parsed: unknown = JSON.parse(rawBody);
-    live = normalizeReservePayload(parsed, at, url);
-    liveError = null;
-    const summary=summarizeSnapshot(live); networkMonitor.accept({total:summary.total,statuses:{withResv:summary.withResv,withoutResv:summary.withoutResv}},'NETWORK',at);
-  } catch (e) {
-    // 保留上一次成功快照，避免界面在解析失败时显示空数据
-    liveError = e instanceof Error ? e.message : '实时响应解析失败';
-  }
-  notifyRuntime();
-}
-
-function readDom(): DomSummary {
-  const roomTitle = document.querySelector('.seat h3')?.textContent ?? '';
-  const nodes = Array.from(document.querySelectorAll<HTMLElement>('.seat-area .draggable'));
-  const items = nodes.map((e) => ({
-    name: e.querySelector('em')?.textContent?.trim() ?? '',
-    left: e.style.left,
-    top: e.style.top,
-    className: e.className,
-  }));
-  // 解析器保持严格校验：路由、房间标题、152 个唯一编号
-  parseVisibleSeats(location.hash, roomTitle, items);
-
-  const classCounts: Record<string, number> = {};
-  let withFreeIntervals = 0;
-  for (const node of nodes) {
-    for (const token of countClasses(node.className)) {
-      classCounts[token] = (classCounts[token] ?? 0) + 1;
-    }
-    // title 形如 "1D-001\n空闲时间：\n21:30 - 21:40"；无空闲时不含「空闲时间：」
-    const title = node.getAttribute('title') ?? '';
-    if (title.includes('空闲时间：') && !/空闲时间：\s*无/.test(title)) withFreeIntervals += 1;
-  }
-
-  return {
-    at: new Date().toISOString(),
-    route: location.hash,
-    roomTitle: roomTitle.trim(),
-    count: nodes.length,
-    classCounts,
-    withFreeIntervals,
-  };
-}
-
-if (isTarget(location.href)) {
-  // 向 MAIN world 索取 hook 缓冲的早期响应，避免 document_start → document_idle 之间丢数据
-  try {
-    window.postMessage({channel: WANT_CHANNEL}, location.origin);
-  } catch {
-    /* ignore */
-  }
-
-  window.addEventListener('message', (event: MessageEvent) => {
-    if (event.source !== window) return;
-    if (event.origin !== location.origin) return;
-    const data = event.data as {channel?: string; body?: unknown; at?: unknown; url?: unknown} | null;
-    if (!data || data.channel !== LIVE_CHANNEL) return;
-    if (typeof data.body !== 'string' || typeof data.at !== 'string') return;
-    acceptLive(data.body, data.at, typeof data.url === 'string' ? data.url : '/ic-web/reserve');
-  });
-
-  chrome.runtime.onMessage.addListener((m, _s, reply) => {
-    if (m?.type === 'READ_DAILY_SEAT') {
-      const title = document.querySelector('.seat h3')?.textContent ?? '';
-      const codes = Array.from(document.querySelectorAll('.seat-area .draggable em'), node => node.textContent?.trim() ?? '');
-      const seat = liveError ? null : readDailySeat(live, location.hash, title, codes, m.roomName, m.seatCode, Date.now());
-      reply({seat});
-      return;
-    }
-    if (m?.type === 'READ_MY_RESERVATIONS') {
-      try { reply({ok:true,...parsePersonalRecords(document,location.hash)}); }
-      catch(error){reply({ok:false,error:error instanceof Error?error.message:'预约读取失败'});}
-      return;
-    }
-    if (m?.type === 'READ_PAGE_SEATS') {
-      try {
-        const dom = readDom();
-        lastDom = dom;
-        lastDomKey = domKey(dom);
-        reply({ok: true, dom, observedAt: dom.at, source: 'CURRENT_PAGE_DOM', note: '页面读取时刻，非数据刷新时刻'});
-      } catch (e) {
-        reply({ok: false, error: e instanceof Error ? e.message : '页面数据不可用'});
-      }
-      return;
-    }
-    if (m?.type === 'GET_LIVE') {
-      reply({
-        ok: true,
-        live: live ? {snapshot: live, summary: summarizeSnapshot(live)} : null,
-        liveError,
-        hookSeen,
-        capturedCount,
-        eventMonitor: {network:networkMonitor.status(Date.now(),isTarget(location.href)),dom:domMonitor.status(Date.now(),isTarget(location.href)),events:networkMonitor.timeline().length+domMonitor.timeline().length},
-        dom: lastDom,
-      });
-      return;
-    }
-    if (m?.type === 'PAGE_SNAPSHOT') {
-      reply({target: true, room: 'UNKNOWN', login: detectLogin(), seats: readSeats(), updatedAt: new Date().toISOString(), reason: '等待获取真实座位数据；页面结构和登录标识尚未核验'});
-    }
-  });
-
-  // 该站是 SPA：座位是异步渲染的，侧边栏可能先于座位出现就绪。
-  // 因此监听 DOM 与路由变化，在数据真正变化时主动通知侧边栏，避免用户手动刷新。
+function observePage(): void {
+  const network = new SeatObservationMonitor({maxAgeMs: LIVE_MAX_AGE_MS, maxObservations: 10_000});
+  const dom = new SeatObservationMonitor({maxAgeMs: LIVE_MAX_AGE_MS, maxObservations: 10_000});
+  const capturedBy = {XHR: 0, FETCH: 0};
+  const recentIds = new Set<number>();
+  let highestId = 0;
+  let transports: LiveReply['transports'] = [];
+  let live: LiveSnapshot | null = null;
+  let lastDom: DomSummary | null = null;
+  let liveError: string | null = null;
+  let domError: string | null = null;
+  let lastCapturedAt: string | null = null;
+  let page = initialPage;
+  let active = true;
+  let session: LiveReply['session'] = 'UNKNOWN';
+  let recoveryCutoff = 0;
+  let sessionReady = false;
+  let sessionCheck = 0;
+  let personalKey = '';
   let debounce: number | undefined;
-  function safeRefreshDom(): void {
-    try {
-      const dom = readDom();
-      const key = domKey(dom);
-      domMonitor.accept({total:dom.count,statuses:dom.classCounts},'DOM',dom.at);
-      lastDom = dom;
-      if (key !== lastDomKey) {
-        lastDomKey = key;
-        notifyRuntime();
-      }
-    } catch {
-      /* 座位还没渲染完、或不在目标路由：静默忽略，等下一次变化 */
+  let domRunning = false;
+
+  function notify() {
+    void chrome.runtime.sendMessage({type: 'LIVE_UPDATE'}).catch(() => {});
+  }
+
+  function resetData() {
+    live = null;
+    lastDom = null;
+    lastCapturedAt = null;
+    liveError = null;
+    domError = null;
+    network.reset();
+    dom.reset();
+    if (session === 'SESSION_LOST') {
+      network.invalidate('SESSION_LOST');
+      dom.invalidate('SESSION_LOST');
     }
   }
-  function scheduleRefresh(): void {
+
+  function syncRoute() {
+    const current = DlmuAdapter.identifyPage(location.href);
+    if (current.kind === page.kind && current.route === page.route) return;
+    page = current;
+    personalKey = '';
+    resetData();
+    connectObserver();
+    scheduleRead();
+    notify();
+  }
+
+  function setSession(value: LiveReply['session']) {
+    if (session === value) return;
+    const resumed = session === 'SESSION_LOST';
+    session = value;
+    if (value === 'SESSION_LOST') {
+      network.invalidate('SESSION_LOST');
+      dom.invalidate('SESSION_LOST');
+    } else if (resumed) {
+      resetData();
+      scheduleRead();
+    }
+    connectObserver();
+    notify();
+  }
+
+  async function checkSession() {
+    const check = ++sessionCheck;
+    const reply = await chrome.runtime.sendMessage({type: 'DAILY_SESSION_STATUS'}).catch(() => null);
+    if (check !== sessionCheck || !reply?.ok) return;
+    recoveryCutoff = Number.isSafeInteger(reply.verifiedAt) ? reply.verifiedAt : 0;
+    setSession(reply.lost ? 'SESSION_LOST' : reply.verified ? 'REVERIFIED' : 'UNKNOWN');
+  }
+
+  function captureError(message: string) {
+    liveError = message;
+    network.invalidate('UNKNOWN', message);
+    notify();
+  }
+
+  window.addEventListener('message', event => {
+    if (!active || event.source !== window || event.origin !== location.origin || !event.data || typeof event.data !== 'object') return;
+    const data = event.data;
+    if (data.channel === READY_CHANNEL && Array.isArray(data.transports)) {
+      const next = Array.from(new Set<'XHR' | 'FETCH'>(data.transports.filter((item: unknown) => item === 'XHR' || item === 'FETCH')));
+      if (next.join() !== transports.join()) { transports = next; notify(); }
+      return;
+    }
+    if (data.channel !== LIVE_CHANNEL || !sessionReady || data.url !== '/ic-web/reserve') return;
+    syncRoute();
+    if (page.kind !== 'SEATS' || data.route !== page.route ||
+        !Number.isSafeInteger(data.captureId) || data.captureId < 1 ||
+        (data.transport !== 'XHR' && data.transport !== 'FETCH') || typeof data.at !== 'string') return;
+    const at = Date.parse(data.at);
+    if (!Number.isFinite(at) || at > Date.now() || Date.now() - at > LIVE_MAX_AGE_MS ||
+        recentIds.has(data.captureId) || data.captureId <= highestId - 128) return;
+    highestId = Math.max(highestId, data.captureId);
+    recentIds.add(data.captureId);
+    for (const id of recentIds) if (id <= highestId - 128) recentIds.delete(id);
+    capturedBy[data.transport as 'XHR' | 'FETCH'] += 1;
+    if (lastCapturedAt && at < Date.parse(lastCapturedAt)) { notify(); return; }
+    lastCapturedAt = data.at;
+
+    if (data.httpStatus === 401) {
+      ++sessionCheck;
+      setSession('SESSION_LOST');
+      void chrome.runtime.sendMessage({type: 'DAILY_SESSION_LOST'}).catch(() => {});
+      return;
+    }
+    if (session === 'SESSION_LOST' || at < recoveryCutoff) { notify(); return; }
+    if (data.httpStatus === 403) { captureError('学校页面返回访问受限（403），当前数据待核验'); return; }
+    if (data.observationError || typeof data.body !== 'string' || data.body.length > 4 * 1024 * 1024) {
+      captureError('响应无法解析或超过大小限制');
+      return;
+    }
+    try {
+      const next = DlmuAdapter.parseSeatResponse(data.body, data.at, page);
+      const observed = network.observe(fingerprintNetwork(next));
+      if (observed.accepted) { live = next; liveError = null; }
+      notify();
+    } catch {
+      captureError('座位响应结构或区域校验失败');
+    }
+  });
+
+  function readDom() {
+    if (session === 'SESSION_LOST') throw Error('请先在官方个人预约页重新核验');
+    const {roomTitle, rows} = DlmuAdapter.readSeatPage(document, page);
+    const at = new Date().toISOString();
+    const classCounts: Record<string, number> = {};
+    let withFreeIntervals = 0;
+    const classTokens = new Set(['green', 'yellowGreen', 'yellow', 'gray', 'noopenlook', 'isCheckedSeat']);
+    for (const row of rows) {
+      const known = row.className.split(/\s+/).filter(token => classTokens.has(token));
+      for (const token of known.length ? known : ['other']) classCounts[token] = (classCounts[token] ?? 0) + 1;
+      if (row.title.includes('空闲时间：') && !/空闲时间：\s*无/.test(row.title)) withFreeIntervals++;
+    }
+    const wasInvalid = domError !== null;
+    const observation = dom.observe(fingerprintDom(rows, at));
+    if (observation.accepted) {
+      lastDom = {at, route: page.route, roomTitle, count: rows.length, classCounts, withFreeIntervals};
+      domError = null;
+    }
+    if (observation.state === 'BASELINE' || observation.state === 'CHANGED' || wasInvalid && observation.accepted) notify();
+    return lastDom;
+  }
+
+  function readCurrentPage() {
+    syncRoute();
+    if (!active || document.hidden || !sessionReady) return;
+    if (page.kind === 'PERSONAL') {
+      try {
+        const result = DlmuAdapter.readPersonal(document, page.route);
+        const key = JSON.stringify(result.rows.map(({observedAt: _at, ...row}) => row));
+        if (!result.rows.length || key === personalKey) return;
+        personalKey = key;
+        void chrome.runtime.sendMessage({type: 'PRODUCT_IMPORT_OFFICIAL', rows: result.rows}).catch(() => {});
+      } catch { /* Wait for the normal table render. */ }
+    }
+    if (page.kind !== 'SEATS' || session === 'SESSION_LOST') return;
+    try { readDom(); }
+    catch {
+      const error = '座位区域尚未就绪或页面结构异常';
+      dom.invalidate('UNKNOWN', error);
+      if (domError !== error) { domError = error; notify(); }
+    }
+  }
+
+  function scheduleRead() {
     window.clearTimeout(debounce);
-    debounce = window.setTimeout(safeRefreshDom, 600);
+    if (active && !document.hidden) debounce = window.setTimeout(readCurrentPage, 250);
   }
 
-  window.addEventListener('hashchange', scheduleRefresh);
-  try {
-    const seatObserver=new MutationObserver(records=>{if(relevantMutation(records))scheduleRefresh()});seatObserver.observe(document.documentElement, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ['class', 'title', 'style'],
-    });
-    window.addEventListener('pagehide',()=>{seatObserver.disconnect();window.clearTimeout(debounce)});window.addEventListener('pageshow',()=>{seatObserver.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','title','style']});scheduleRefresh()});
-  } catch {
-    /* 观察失败不影响主要功能 */
-  }
-}
+  const observer = new MutationObserver(records => {
+    const selector = page.kind === 'PERSONAL' ? '.el-table,table' : '.seat-area,.seat h3';
+    if (relevantMutation(records, selector)) scheduleRead();
+  });
 
-if(isTarget(location.href)){
- let timer:number|undefined,key='',stopped=false;
- const publish=()=>{if(stopped||location.hash.split('?')[0]!=='#/ic/userinfo')return;try{const result=parsePersonalRecords(document,location.hash);const next=JSON.stringify(result.rows.map(({observedAt:_at,...r})=>r));if(next===key||!result.rows.length)return;key=next;void chrome.runtime.sendMessage({type:'PRODUCT_IMPORT_OFFICIAL',rows:result.rows}).catch(()=>{})}catch{/* wait for normal table rendering */}};
- const schedule=()=>{window.clearTimeout(timer);timer=window.setTimeout(publish,500)};
- const observer=new MutationObserver(records=>{if(records.some(r=>{const e=r.target instanceof Element?r.target:r.target.parentElement;return !!e?.closest('.el-table,table')||Array.from(r.addedNodes).some(n=>n instanceof Element&&(n.matches('table,.el-table')||!!n.querySelector('table,.el-table')))}))schedule()});
- observer.observe(document.documentElement,{subtree:true,childList:true,characterData:true});window.addEventListener('hashchange',schedule);window.addEventListener('pageshow',()=>{stopped=false;observer.observe(document.documentElement,{subtree:true,childList:true,characterData:true});schedule()});document.addEventListener('visibilitychange',schedule);window.addEventListener('pagehide',()=>{stopped=true;observer.disconnect();window.clearTimeout(timer)});publish();
+  function connectObserver() {
+    observer.disconnect();
+    window.clearTimeout(debounce);
+    domRunning = active && !document.hidden && (page.kind === 'PERSONAL' || page.kind === 'SEATS' && session !== 'SESSION_LOST');
+    if (!domRunning) return;
+    observer.observe(document.documentElement, {subtree: true, childList: true, characterData: true,
+      attributes: true, attributeFilter: ['class', 'title', 'style', 'hidden', 'aria-hidden']});
+    scheduleRead();
+  }
+
+  chrome.runtime.onMessage.addListener((message, sender, reply) => {
+    if (sender.id !== chrome.runtime.id) return;
+    if (message?.type === 'DAILY_SESSION_UPDATED') { void checkSession(); return; }
+    syncRoute();
+    if (message?.type === 'GET_LIVE') {
+      const now = Date.now();
+      const selected = page.kind === 'SEATS' && String(message.roomId) === page.roomId &&
+        Number.isSafeInteger(message.seatId) && typeof message.seatCode === 'string' && message.seatCode.length <= 32;
+      const networkState = network.status(now), domState = dom.status(now);
+      const response: LiveReply = {ok: true, route: page.route, live: live ? {snapshot: live, summary: summarizeSnapshot(live)} : null,
+        liveError, domError, hookSeen: transports.length > 0, transports, capturedCount: capturedBy.XHR + capturedBy.FETCH,
+        capturedBy, lastCapturedAt, session, domRunning: domRunning && page.kind === 'SEATS', dom: lastDom,
+        eventMonitor: {network: networkState, dom: domState, events: networkState.eventCount + domState.eventCount},
+        selected: {network: selected ? network.lastChangeFor(networkSeatKey(message.roomId, message.seatId, message.seatCode)) : null,
+          dom: selected ? dom.lastChangeFor(domSeatKey(message.seatCode)) : null}};
+      reply(response);
+    }
+    if (message?.type === 'READ_PAGE_SEATS') {
+      try {
+        const observed = readDom();
+        if (!observed) throw Error('当前没有有效的页面观察');
+        reply({ok: true, dom: observed, observedAt: observed.at, source: 'CURRENT_PAGE_DOM', note: '页面读取时刻，非服务器更新时间'});
+      } catch { reply({ok: false, error: '座位页面未就绪或会话待恢复'}); }
+    }
+    if (message?.type === 'READ_DAILY_SEAT') {
+      let seat = null;
+      if (active && sessionReady && session !== 'SESSION_LOST' && !liveError && network.status(Date.now()).freshness === 'FRESH') {
+        try {
+          const {roomTitle, rows} = DlmuAdapter.readSeatPage(document, page);
+          seat = DlmuAdapter.matchSeat(live, page.route, roomTitle, rows.map(row => row.name), message.roomName, message.seatCode, Date.now());
+        } catch { /* Reject mismatched or changed page structures. */ }
+      }
+      reply({seat});
+    }
+    if (message?.type === 'READ_MY_RESERVATIONS') {
+      try { reply({ok: true, ...DlmuAdapter.readPersonal(document, page.route)}); }
+      catch { reply({ok: false, error: '个人预约页未就绪或结构异常'}); }
+    }
+    if (message?.type === 'PAGE_SNAPSHOT') {
+      reply({target: true, room: page.kind === 'SEATS' ? page.roomId : 'UNKNOWN', login: session,
+        seats: readSeats(), updatedAt: new Date().toISOString()});
+    }
+  });
+
+  window.addEventListener('hashchange', syncRoute);
+  window.addEventListener('popstate', syncRoute);
+  document.addEventListener('visibilitychange', () => { syncRoute(); connectObserver(); notify(); });
+  window.addEventListener('pagehide', () => {
+    active = false;
+    network.stop();
+    dom.stop();
+    connectObserver();
+  });
+  window.addEventListener('pageshow', event => {
+    if (!event.persisted) return;
+    active = true;
+    resetData();
+    personalKey = '';
+    void checkSession();
+    syncRoute();
+    connectObserver();
+    notify();
+  });
+  void checkSession().finally(() => {
+    sessionReady = true;
+    window.postMessage({channel: WANT_CHANNEL}, location.origin);
+    connectObserver();
+  });
 }

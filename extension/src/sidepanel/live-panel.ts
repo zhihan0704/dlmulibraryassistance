@@ -1,30 +1,18 @@
-import type {LiveRoomSummary, LiveSnapshot} from '../core/live-seats';
-import {beijingMinuteOfDay, freeGaps, NOW_OFFSET_MINUTES} from '../core/free-time';
+import {DlmuAdapter} from '../adapters/dlmu-adapter';
+import type {LiveSeat} from '../core/live-seats';
+import type {SeatObservationStatus} from '../core/seat-observation';
+import {LIVE_MAX_AGE_MS, type LiveReply} from '../shared/live-monitor';
 
-const TARGET_PREFIX = 'https://seats.dlmu.edu.cn/';
+const TIME = new Intl.DateTimeFormat('zh-CN', {timeZone: 'Asia/Shanghai', dateStyle: 'medium', timeStyle: 'medium'});
+const LABELS: Record<SeatObservationStatus['state'], string> = {
+  BASELINE: '已取得首次观察', CHANGED: '发现变化', UNCHANGED: '新观察内容相同',
+  STALE: '数据已过期，等待新观察', UNKNOWN: '数据待核验', SESSION_LOST: '认证待恢复',
+  SOURCE_UNAVAILABLE: '等待页面数据', STOPPED: '本次监听已停止',
+};
 
-interface LiveReply {
-  ok: boolean;
-  live: {
-    snapshot: LiveSnapshot;
-    summary: {total: number; withResv: number; withoutResv: number; invalidRows: number; rooms: LiveRoomSummary[]};
-  } | null;
-  liveError: string | null;
-  hookSeen: boolean;
-  capturedCount: number;
-  dom: {
-    at: string;
-    route: string;
-    roomTitle: string;
-    count: number;
-    classCounts: Record<string, number>;
-    withFreeIntervals: number;
-  } | null;
-}
-
-function fmtTime(iso: string): string {
-  const d = new Date(iso);
-  return Number.isFinite(d.getTime()) ? d.toLocaleString('zh-CN', {timeZone: 'Asia/Shanghai'}) : '时间无效';
+function time(value: string | null | undefined): string {
+  const stamp = value ? Date.parse(value) : NaN;
+  return Number.isFinite(stamp) ? TIME.format(stamp) + '（北京时间）' : '暂无';
 }
 
 function line(label: string, value: string): HTMLParagraphElement {
@@ -36,195 +24,170 @@ function line(label: string, value: string): HTMLParagraphElement {
 }
 
 export function mountLivePanel(host: HTMLElement): void {
-  host.innerHTML = `<h2>实时数据 · 当前页面</h2>
-<p class="muted">数据来自你正在浏览的图书馆网页本身。扩展不发起请求、不读取 Cookie、不读取他人信息。</p>
-<p id="live-site">正在识别当前页面…</p>
-<div id="live-dom"></div>
+  host.innerHTML = `<h2>实时监听 · 当前页面</h2>
+<p class="muted">监听页面自然产生的响应和座位变化。显示的时间是本机捕获或读取时间。</p>
+<p id="live-site" role="status">正在识别当前页面…</p>
 <div id="live-resp"></div>
+<div id="live-dom"></div>
 <div id="live-seats-wrap" hidden>
-  <h3>实时座位（按网页坐标）</h3>
-  <label>搜索座位<input id="live-search" type="search" placeholder="例如 1D-052" aria-label="搜索实时座位"></label>
+  <h3>最近捕获的座位地图</h3>
+  <label>搜索座位<input id="live-search" type="search" placeholder="例如 1D-052"></label>
   <p id="live-seat-count" class="muted"></p>
-  <div class="map-scroll"><div id="live-seat-map" role="group" aria-label="当前页面实时座位"></div></div>
-  <p id="live-selected" aria-live="polite">尚未选择实时座位</p>
+  <div class="map-scroll"><div id="live-seat-map" role="group" aria-label="最近捕获的座位"></div></div>
+  <p id="live-selected" aria-live="polite">尚未选择座位</p>
+  <p id="live-selected-change"></p>
 </div>
-<p class="waiting" id="live-unknown">座位状态：UNKNOWN —— 状态映射尚未通过现场核验，不推断空闲或占用。</p>
-<button type="button" id="live-refresh">刷新当前页面数据</button>
+<p class="waiting" id="live-unknown">座位可用性待核验（UNKNOWN）。预约记录、状态码和 DOM 样式仅供观察。</p>
+<button type="button" id="live-refresh">读取当前页面缓存</button>
 <p id="live-error" role="alert"></p>`;
 
-  const site = host.querySelector<HTMLParagraphElement>('#live-site')!;
-  const domBox = host.querySelector<HTMLDivElement>('#live-dom')!;
-  const respBox = host.querySelector<HTMLDivElement>('#live-resp')!;
-  const errorBox = host.querySelector<HTMLParagraphElement>('#live-error')!;
-  const seatsWrap = host.querySelector<HTMLDivElement>('#live-seats-wrap')!;
-  const seatMap = host.querySelector<HTMLDivElement>('#live-seat-map')!;
-  const seatCount = host.querySelector<HTMLParagraphElement>('#live-seat-count')!;
+  const site = host.querySelector<HTMLElement>('#live-site')!;
+  const domBox = host.querySelector<HTMLElement>('#live-dom')!;
+  const respBox = host.querySelector<HTMLElement>('#live-resp')!;
+  const errorBox = host.querySelector<HTMLElement>('#live-error')!;
+  const seatsWrap = host.querySelector<HTMLElement>('#live-seats-wrap')!;
+  const seatMap = host.querySelector<HTMLElement>('#live-seat-map')!;
+  const seatCount = host.querySelector<HTMLElement>('#live-seat-count')!;
   const search = host.querySelector<HTMLInputElement>('#live-search')!;
-  const selectedLine = host.querySelector<HTMLParagraphElement>('#live-selected')!;
-
-  let liveSeats: LiveSnapshot['seats'] = [];
-  let selectedId: number | null = null;
+  const selectedLine = host.querySelector<HTMLElement>('#live-selected')!;
+  const selectedChange = host.querySelector<HTMLElement>('#live-selected-change')!;
+  let tabId: number | undefined;
+  let route = '';
+  let selected: Pick<LiveSeat, 'roomId' | 'devId' | 'name'> | null = null;
+  let liveSeats: LiveSeat[] = [];
+  let mapKey = '';
+  let generation = 0;
+  let expiry: number | undefined;
+  let updateTimer: number | undefined;
 
   function renderSeats(): void {
-    if (!liveSeats.length) {
-      seatsWrap.hidden = true;
-      return;
-    }
-    seatsWrap.hidden = false;
+    seatsWrap.hidden = !liveSeats.length && !selected;
     const query = search.value.trim().toUpperCase();
-    const shown = liveSeats.filter((s) => s.name.toUpperCase().includes(query));
-    seatCount.textContent = `显示 ${shown.length} / ${liveSeats.length} 个实时座位 · 全部 UNKNOWN`;
+    const shown = liveSeats.filter(seat => seat.name.toUpperCase().includes(query));
+    const key = JSON.stringify([selected?.devId, shown.map(seat => [seat.devId, seat.name, seat.position, seat.resvIntervals.length])]);
+    if (mapKey === key) return;
+    mapKey = key;
+    seatCount.textContent = `显示 ${shown.length} / ${liveSeats.length} 个座位`;
     seatMap.replaceChildren();
     for (const seat of shown) {
-      const b = document.createElement('button');
-      b.className = 'real-seat live-seat';
-      b.type = 'button';
-      b.textContent = seat.name;
-      b.dataset.devId = String(seat.devId);
-      b.setAttribute('aria-label', `${seat.name} UNKNOWN`);
-      b.setAttribute('aria-pressed', String(selectedId === seat.devId));
-      const intervalText =
-        seat.resvIntervals.length > 0
-          ? `${seat.resvIntervals.length} 条预约时间记录`
-          : '无预约时间记录';
-      b.title = `${seat.name} · devId ${seat.devId} · ${intervalText} · UNKNOWN`;
+      const button = document.createElement('button');
+      button.className = 'real-seat live-seat';
+      button.type = 'button';
+      button.textContent = seat.name;
+      button.dataset.devId = String(seat.devId);
+      button.setAttribute('aria-pressed', String(selected?.devId === seat.devId));
+      button.title = `${seat.name} · ${seat.resvIntervals.length} 条预约时间记录 · 状态待核验`;
       if (seat.position) {
-        b.style.left = `${seat.position.x}%`;
-        b.style.top = `${seat.position.y}%`;
+        button.style.left = `${seat.position.x}%`;
+        button.style.top = `${seat.position.y}%`;
       }
-      b.onclick = () => {
-        selectedId = seat.devId;
-        const ranges = seat.resvIntervals
-          .map((i) => `${i.startTime}–${i.endTime}`)
-          .join('，');
-        // 空闲时段是「客观时间区间」，不是「可预约」判断 —— 措辞上严格区分
-        const from = beijingMinuteOfDay(new Date().toISOString()) + NOW_OFFSET_MINUTES;
-        const gaps = freeGaps(seat, from);
-        const freeText = gaps.length
-          ? `${gaps.map((g) => `${g.start}–${g.end}`).join('，')}（合计 ${gaps.reduce((n, g) => n + g.minutes, 0)} 分钟）`
-          : '无';
-        selectedLine.textContent =
-          `已选择 ${seat.name} · devId ${seat.devId} · 开放 ${seat.openStart ?? '?'}–${seat.openEnd ?? '?'}` +
-          ` · 预约时间记录 ${seat.resvIntervals.length} 条` +
-          (ranges ? `（${ranges}）` : '') +
-          ` · 按预约记录推算的自现在起空闲时段：${freeText}` +
-          ' · 状态 UNKNOWN（不判断可否预约）';
-        renderSeats();
-      };
-      seatMap.append(b);
+      button.onclick = () => { selected = seat; renderSeats(); renderSelection(); void refresh(); };
+      seatMap.append(button);
     }
   }
 
-  search.addEventListener('input', renderSeats);
+  function renderSelection(reply?: LiveReply) {
+    if (!selected) {
+      selectedLine.textContent = '尚未选择座位';
+      selectedChange.textContent = '';
+      return;
+    }
+    const seat = liveSeats.find(row => row.devId === selected?.devId && row.name === selected?.name);
+    const ranges = seat?.resvIntervals.map(interval => `${interval.startTime}–${interval.endTime}`).join('，');
+    selectedLine.textContent = `已选择 ${selected.name} · devId ${selected.devId} · ` + (seat
+      ? `预约时间记录 ${seat.resvIntervals.length} 条${ranges ? `（${ranges}，网页时间）` : ''} · 状态 UNKNOWN`
+      : '当前观察中没有匹配的座位 · 状态 UNKNOWN');
+    const changes = reply?.selected;
+    selectedChange.textContent = `最近一次目标座位变化｜响应 ${time(changes?.network?.observedAt)}｜DOM ${time(changes?.dom?.observedAt)}`;
+  }
 
   function reset(message: string): void {
     site.textContent = message;
     domBox.replaceChildren();
     respBox.replaceChildren();
+    selected = null;
+    route = '';
     liveSeats = [];
-    seatsWrap.hidden = true;
-    seatMap.replaceChildren();
-  }
-
-  function renderDom(reply: LiveReply): void {
-    domBox.replaceChildren();
-    const dom = reply.dom;
-    if (!dom) {
-      domBox.append(line('页面 DOM', '尚未读取（请刷新一次图书馆页面）'));
-      return;
-    }
-    domBox.append(line('页面路由', dom.route || '(空)'));
-    domBox.append(line('房间标题', dom.roomTitle || '(未识别)'));
-    domBox.append(line('DOM 座位数', String(dom.count)));
-    const dist = Object.entries(dom.classCounts)
-      .sort((a, b) => b[1] - a[1])
-      .map(([k, v]) => `${k} ${v}`)
-      .join(' · ');
-    domBox.append(line('状态类分布', dist || '(无)'));
-    domBox.append(line('带空闲时段的座位', String(dom.withFreeIntervals)));
-    domBox.append(line('DOM 读取时刻', fmtTime(dom.at)));
-    const note = document.createElement('p');
-    note.className = 'muted';
-    note.textContent = 'DOM 不含 devId 与原始 resvInfo；此处状态类仅为网页给节点加的样式名，语义未确认。';
-    domBox.append(note);
-  }
-
-  function renderLive(reply: LiveReply): void {
-    respBox.replaceChildren();
-    const head = line('响应旁路', reply.hookSeen ? '已安装并运行' : '未捕获到（页面可能尚未请求，或需刷新一次）');
-    respBox.append(head);
-    respBox.append(line('捕获次数', String(reply.capturedCount)));
-
-    if (reply.liveError) {
-      const err = document.createElement('p');
-      err.className = 'waiting';
-      err.textContent = '最近一次解析失败：' + reply.liveError;
-      respBox.append(err);
-    }
-    if (!reply.live) {
-      respBox.append(line('座位数据', '尚未取得实时响应'));
-      liveSeats = [];
-      seatsWrap.hidden = true;
-      return;
-    }
-    const {snapshot, summary} = reply.live;
-    liveSeats = snapshot.seats;
     renderSeats();
-    respBox.append(line('数据来源', 'LIVE_RESERVE（网页自身请求的响应）'));
-    respBox.append(line('捕获时刻', fmtTime(snapshot.capturedAt)));
-    const age=Date.now()-Date.parse(snapshot.capturedAt);respBox.append(line('数据新鲜度',age<0||!Number.isFinite(age)?'UNKNOWN：系统时间需核对':age>120000?'STALE：页面没有提供新响应，不代表状态未变化':'最近一次页面响应；不保证此刻实时'));
-    respBox.append(line('实时座位数', String(summary.total)));
-    const rooms = summary.rooms.map((r) => `${r.roomName || '(未命名)'} ${r.roomId} ×${r.count}`).join(' · ');
-    respBox.append(line('房间分布', rooms || '(无)'));
-    respBox.append(line('含预约记录的座位', String(summary.withResv)));
-    respBox.append(line('无预约记录的座位', String(summary.withoutResv)));
-    if (summary.invalidRows > 0) respBox.append(line('被跳过的畸形行', String(summary.invalidRows)));
-    const note = document.createElement('p');
-    note.className = 'muted';
-    note.textContent =
-      '「含预约记录」只表示该座位 resvInfo 非空，不等于占用；resvStatus 为位掩码且语义未确认，因此不据此判断可用性。他人姓名与账号字段已在页内丢弃，未进入扩展。';
-    respBox.append(note);
+    renderSelection();
+  }
+
+  function render(reply: LiveReply) {
+    if (route !== reply.route) { route = reply.route; selected = null; }
+    const {network, dom: domState} = reply.eventMonitor;
+    site.textContent = '学校官方页面 · ' + (reply.route || '等待进入座位区域');
+    respBox.replaceChildren(
+      line('响应旁路', reply.hookSeen ? `已安装并运行（${reply.transports.join(' / ')}）` : '等待旁路就绪'),
+      line('本标签页捕获', `${reply.capturedCount} 次 · XHR ${reply.capturedBy.XHR} · fetch ${reply.capturedBy.FETCH}`),
+      line('最近响应捕获', time(reply.lastCapturedAt)),
+      line('最近有效响应捕获', time(network.lastFreshAt)),
+      line('响应观察', LABELS[network.state]),
+      line('数据新鲜度', network.freshness === 'FRESH' ? '两分钟内的页面观察' : network.freshness === 'STALE' ? '已过期' : '待核验'),
+      line('会话', reply.session === 'SESSION_LOST' ? '请人工登录并打开官方个人预约页核验' : reply.session === 'REVERIFIED' ? '上次认证中断已通过个人页复核' : '待核验'),
+      line('服务器更新时间', '未取得服务器时间戳'),
+    );
+    if (reply.liveError) respBox.append(line('最近响应解析问题', reply.liveError));
+    if (reply.live) {
+      const {summary} = reply.live;
+      respBox.append(line(network.freshness === 'FRESH' ? '响应座位数' : '上次有效响应座位数', String(summary.total)),
+        line('含预约时间记录', `${summary.withResv} 个座位`));
+    }
+    domBox.replaceChildren(
+      line('座位 DOM 监听', reply.domRunning ? '运行中' : '等待座位页在前台就绪'),
+      line('DOM 观察', LABELS[domState.state]),
+      line('最近 DOM 观察', time(domState.lastFreshAt)),
+      line('最近 DOM 变化', time(domState.lastChangedAt)),
+      line('本区域变化事件', String(reply.eventMonitor.events)),
+    );
+    if (reply.domError) domBox.append(line('页面读取问题', reply.domError));
+    if (reply.dom) domBox.append(line('区域', reply.dom.roomTitle), line('DOM 座位数', String(reply.dom.count)),
+      line('页面标注空闲时段的座位', `${reply.dom.withFreeIntervals} 个（样式与文字观察）`));
+    liveSeats = reply.session === 'SESSION_LOST' ? [] : reply.live?.snapshot.seats ?? [];
+    renderSeats();
+    renderSelection(reply);
+
+    const now = Date.now();
+    const deadlines = [network, domState].filter(value => value.freshness === 'FRESH' && value.lastFreshAt)
+      .map(value => Date.parse(value.lastFreshAt!) + LIVE_MAX_AGE_MS + 1).filter(at => at > now);
+    if (deadlines.length) expiry = window.setTimeout(() => void refresh(), Math.min(...deadlines) - now);
   }
 
   async function refresh(): Promise<void> {
+    const requested = ++generation;
+    window.clearTimeout(expiry);
     errorBox.textContent = '';
     try {
       const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
-      if (!tab?.id || !tab.url?.startsWith(TARGET_PREFIX)) {
-        reset('当前不是目标网站');
-        return;
-      }
-      site.textContent = '已识别目标网站';
-      let reply: LiveReply;
-      try {
-        reply = (await chrome.tabs.sendMessage(tab.id, {type: 'GET_LIVE'})) as LiveReply;
-      } catch {
-        reset('无法读取页面脚本，请在图书馆页面按 F5 刷新后再试');
-        errorBox.textContent = '扩展脚本尚未注入该标签页。';
-        return;
-      }
-      if (!reply || reply.ok !== true) {
-        reset('页面脚本未返回数据');
-        return;
-      }
-      await chrome.tabs.sendMessage(tab.id, {type: 'READ_PAGE_SEATS'}).catch(() => {});
-      const after = (await chrome.tabs.sendMessage(tab.id, {type: 'GET_LIVE'}).catch(() => null)) as LiveReply | null;
-      const final = after && after.ok ? after : reply;
-      renderDom(final);
-      renderLive(final);
-    } catch (e) {
-      errorBox.textContent = e instanceof Error ? e.message : '读取失败';
+      if (generation !== requested) return;
+      if (tabId !== tab?.id) { tabId = tab?.id; selected = null; route = ''; }
+      const page = DlmuAdapter.identifyPage(tab?.url ?? '');
+      if (page.kind === 'SSO') { reset('学校统一认证页面 · 等待人工登录'); return; }
+      if (tabId === undefined || page.kind === 'OTHER' || tab.incognito) { reset('当前标签页未识别为学校官方页面'); return; }
+      const reply: LiveReply | undefined = await chrome.tabs.sendMessage(tabId, {
+        type: 'GET_LIVE', roomId: selected?.roomId, seatId: selected?.devId, seatCode: selected?.name,
+      }, {frameId: 0});
+      if (generation !== requested) return;
+      if (!reply?.ok) { reset('学校页面脚本尚未提供数据'); return; }
+      render(reply);
+    } catch {
+      if (generation !== requested) return;
+      reset('当前页面脚本无法读取');
+      errorBox.textContent = '请确认扩展已加载。可在学校标签页手动刷新一次后再读取。';
     }
   }
 
+  function scheduleRefresh() {
+    window.clearTimeout(updateTimer);
+    updateTimer = window.setTimeout(() => void refresh(), 180);
+  }
+
+  search.addEventListener('input', renderSeats);
   host.querySelector<HTMLButtonElement>('#live-refresh')!.onclick = () => void refresh();
-
-  let timer: number | undefined;
-  chrome.runtime.onMessage.addListener((m) => {
-    if (m?.type !== 'LIVE_UPDATE') return;
-    window.clearTimeout(timer);
-    timer = window.setTimeout(() => void refresh(), 400);
+  chrome.tabs.onActivated.addListener(scheduleRefresh);
+  chrome.tabs.onUpdated.addListener((id, change) => { if (id === tabId && (change.url || change.status)) scheduleRefresh(); });
+  chrome.runtime.onMessage.addListener((message, sender) => {
+    if (sender.id === chrome.runtime.id && message?.type === 'LIVE_UPDATE' && sender.tab?.id === tabId) scheduleRefresh();
   });
-
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleRefresh(); });
   void refresh();
 }

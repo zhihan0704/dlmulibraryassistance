@@ -16,6 +16,8 @@ export interface LiveResvInterval {
   startTime: string;
   endTime: string;
   resvStatus: number | null;
+  /** Unknown scalar forms are for comparison only. Historical numeric decoders stay isolated. */
+  rawResvStatus?: string | boolean;
 }
 
 export interface LiveSeat {
@@ -49,6 +51,7 @@ export interface LiveSnapshot {
   seats: LiveSeat[];
   /** 被跳过的畸形行数，用于诚实展示而不是静默丢弃 */
   invalidRows: number;
+  invalidIntervals?: number;
   rooms: LiveRoomSummary[];
 }
 
@@ -74,8 +77,8 @@ function readBool(value: unknown): boolean | null {
 }
 
 /** 仅保留时间与状态码，丢弃 title/trueName/logonName 等身份字段 */
-function readIntervals(value: unknown): LiveResvInterval[] {
-  if (!Array.isArray(value)) return [];
+function readIntervals(value: unknown): {intervals: LiveResvInterval[]; invalid: number} {
+  if (!Array.isArray(value)) return {intervals: [], invalid: value == null ? 0 : 1};
   const out: LiveResvInterval[] = [];
   for (const raw of value) {
     if (!raw || typeof raw !== 'object') continue;
@@ -83,10 +86,13 @@ function readIntervals(value: unknown): LiveResvInterval[] {
     const startTime = readText(item.startTime, 32);
     const endTime = readText(item.endTime, 32);
     if (!startTime || !endTime) continue;
-    const resvStatus = typeof item.resvStatus === 'number' ? item.resvStatus : null;
-    out.push({ startTime, endTime, resvStatus });
+    const rawStatus = item.resvStatus;
+    const resvStatus = typeof rawStatus === 'number' && Number.isFinite(rawStatus) ? rawStatus : null;
+    const interval: LiveResvInterval = {startTime, endTime, resvStatus};
+    if (typeof rawStatus === 'boolean' || typeof rawStatus === 'string' && rawStatus.length <= 32) interval.rawResvStatus = rawStatus;
+    out.push(interval);
   }
-  return out;
+  return {intervals: out, invalid: value.length - out.length};
 }
 
 function looksLikeSeat(value: unknown): value is Record<string, unknown> {
@@ -135,6 +141,7 @@ export function normalizeReservePayload(
   const seats: LiveSeat[] = [];
   const seen = new Set<number>();
   let invalidRows = 0;
+  let invalidIntervals = 0;
 
   for (const row of rows) {
     if (!looksLikeSeat(row)) {
@@ -153,6 +160,8 @@ export function normalizeReservePayload(
       continue;
     }
     seen.add(devId);
+    const reservation = readIntervals(item.resvInfo);
+    invalidIntervals += reservation.invalid;
     seats.push({
       devId,
       name,
@@ -164,7 +173,7 @@ export function normalizeReservePayload(
       openStart: readText(item.openStart, 16),
       openEnd: readText(item.openEnd, 16),
       onlyView: readBool(item.onlyView),
-      resvIntervals: readIntervals(item.resvInfo),
+      resvIntervals: reservation.intervals,
       status: 'UNKNOWN',
     });
   }
@@ -185,6 +194,7 @@ export function normalizeReservePayload(
     capturedAt,
     seats,
     invalidRows,
+    ...(invalidIntervals ? {invalidIntervals} : {}),
     rooms: Array.from(roomMap.values()),
   };
 }

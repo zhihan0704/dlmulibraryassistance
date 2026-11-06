@@ -15,36 +15,66 @@ type Listener = (event: unknown) => void;
 const posted: Array<Record<string, unknown>> = [];
 const windowListeners: Record<string, Listener[]> = {};
 const fetchCalls: string[] = [];
+const officialOrigin = 'https://seats.dlmu.edu.cn';
+const seatRoute = '#/ic/seatPredetermine/100455855';
+const fakeLocation = {origin: officialOrigin, hash: seatRoute};
+const reserveUrl = officialOrigin + '/ic-web/reserve';
 
 class FakeXhr {
   responseType = '';
   responseText = '';
+  responseURL = '';
+  status = 200;
   withCredentials = false;
   requestHeaders: Record<string, string> = {};
-  private listeners: Record<string, Listener[]> = {};
-  __lsaUrl?: string;
+  nativeOpenArguments: unknown[] = [];
+  nativeSendBody: unknown;
+  nativeSendError?: Error;
+  private listeners: Record<string, {listener: Listener; once: boolean}[]> = {};
 
   open(_method: string, url: string): void {
-    this.__lsaUrl = url;
+    this.nativeOpenArguments = Array.from(arguments);
+    this.responseURL = new URL(url, officialOrigin).href;
+    this.status = 200;
+    this.responseText = '';
   }
 
-  send(_body?: unknown): void {
-    /* 页面自己的发送行为，测试不关心 */
+  send(body?: unknown): void {
+    this.nativeSendBody = body;
+    if (this.nativeSendError) throw this.nativeSendError;
   }
 
   setRequestHeader(name: string, value: string): void {
     this.requestHeaders[name] = value;
   }
 
-  addEventListener(type: string, cb: Listener): void {
-    (this.listeners[type] ??= []).push(cb);
+  addEventListener(type: string, listener: Listener, options?: {once?: boolean}): void {
+    (this.listeners[type] ??= []).push({listener, once: options?.once === true});
+  }
+
+  removeEventListener(type: string, listener: Listener): void {
+    this.listeners[type] = (this.listeners[type] ?? []).filter(entry => entry.listener !== listener);
   }
 
   fire(type: string): void {
-    for (const cb of this.listeners[type] ?? []) cb.call(this, {type});
+    for (const {listener, once} of [...(this.listeners[type] ?? [])]) {
+      if (once) this.removeEventListener(type, listener);
+      listener.call(this, {type, isTrusted: true});
+    }
   }
 }
 
+function syntheticResponse(url: string, body: BodyInit, status = 200, headers?: HeadersInit): Response {
+  const response = new Response(body, {status, headers});
+  Object.defineProperty(response, 'url', {value: url});
+  return response;
+}
+
+const responseBody = '{"code":0,"data":[{"devId":100456941,"devName":"1D-001"}]}';
+let fetchOverride: Response | null = null;
+let originalPromise: Promise<Response>;
+let originalReceiver: unknown;
+let originalInit: RequestInit | undefined;
 const fakeWindow = {
   postMessage: (message: unknown) => {
     posted.push(message as Record<string, unknown>);
@@ -52,15 +82,23 @@ const fakeWindow = {
   addEventListener: (type: string, cb: Listener) => {
     (windowListeners[type] ??= []).push(cb);
   },
-  fetch: (input: unknown) => {
-    fetchCalls.push(typeof input === 'string' ? input : String((input as Request)?.url ?? input));
-    return Promise.resolve(new Response('{"code":0,"data":[{"devId":100456941,"devName":"1D-001"}]}'));
+  fetch: function (this: unknown, input: RequestInfo | URL, init?: RequestInit) {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    fetchCalls.push(url);
+    originalReceiver = this;
+    originalInit = init;
+    // A native fetch evaluates the input dictionary. The wrapper must not rerun an accessor.
+    void init?.method;
+    const response = fetchOverride ?? syntheticResponse(new URL(url, officialOrigin).href, responseBody);
+    fetchOverride = null;
+    originalPromise = Promise.resolve(response);
+    return originalPromise;
   },
 };
 
 // 必须发生在导入之前：hook 在模块求值时即安装补丁
 (globalThis as unknown as {window: unknown}).window = fakeWindow;
-(globalThis as unknown as {location: unknown}).location = {origin: 'https://seats.dlmu.edu.cn'};
+(globalThis as unknown as {location: unknown}).location = fakeLocation;
 (globalThis as unknown as {XMLHttpRequest: unknown}).XMLHttpRequest = FakeXhr;
 
 await import('../src/content/reserve-hook');
@@ -92,7 +130,10 @@ test('XHR：仅捕获 /ic-web/reserve，且只读响应体', async () => {
   assert.match(String(message.url), /\/ic-web\/reserve/);
   assert.ok(typeof message.at === 'string');
   // 不得携带任何请求侧信息
-  assert.deepEqual(Object.keys(message).sort(), ['at', 'body', 'channel', 'url']);
+  assert.deepEqual(Object.keys(message).sort(), ['at', 'body', 'captureId', 'channel', 'route', 'transport', 'url']);
+  assert.equal(message.route, seatRoute);
+  assert.equal(message.transport, 'XHR');
+  assert.ok(Number.isSafeInteger(message.captureId));
   assert.equal(target.requestHeaders['Cookie'], undefined);
 });
 
@@ -151,6 +192,11 @@ test('缓冲：content script 就绪后索取可重放早期响应', async () =>
   wantHandler({source: fakeWindow, origin:'https://seats.dlmu.edu.cn', data: {channel: 'lsa:want-buffer'}});
   await tick();
   assert.ok(posted.length > before, '索取后应重放已缓冲的响应');
+  const replay = posted.slice(before);
+  const ready = replay.filter(message => message.channel === 'lsa:reserve-observer-ready');
+  assert.equal(ready.length, 1);
+  assert.deepEqual(ready[0].transports, ['XHR', 'FETCH']);
+  assert.ok(replay.some(message => message.captureId === posted[0].captureId), '缓冲重放保留原捕获 ID');
 
   // 非同源/非本窗口的消息必须被忽略
   const after = posted.length;
@@ -172,4 +218,166 @@ test('XHR security: credentials and identities removed before MAIN bridge, URL q
 
 test('fetch security: POST and cross-origin normal page calls pass through without capture', async()=>{
  posted.length=0;await (fakeWindow.fetch as unknown as (input:string,init?:RequestInit)=>Promise<Response>)('/ic-web/reserve',{method:'POST'});await fakeWindow.fetch('https://other.example/ic-web/reserve');await tick();await tick();assert.equal(posted.length,0);
+});
+
+test('XHR preserves native arguments, body, errors and reusable request state', async () => {
+  posted.length = 0;
+  const xhr = new FakeXhr();
+  xhr.open('GET', '/ic-web/reserve');
+  const input = {body: 'original'};
+  xhr.send(input);
+  assert.deepEqual(xhr.nativeOpenArguments, ['GET', '/ic-web/reserve']);
+  assert.equal(xhr.nativeSendBody, input);
+  // Opening another request discards the old callback even if it never loaded.
+  xhr.open('POST', '/ic-web/reserve');
+  xhr.send(input);
+  xhr.responseText = responseBody;
+  xhr.fire('load');
+  assert.equal(posted.length, 0);
+
+  xhr.open('GET', '/ic-web/reserve');
+  const failure = new Error('original native exception');
+  xhr.nativeSendError = failure;
+  assert.throws(() => xhr.send(input), error => error === failure);
+  xhr.nativeSendError = undefined;
+  xhr.send(input);
+  xhr.responseText = responseBody;
+  xhr.fire('load');
+  xhr.fire('load');
+  assert.equal(posted.length, 1);
+});
+
+test('fetch returns the same promise and leaves the original body and caller arguments intact', async () => {
+  posted.length = 0;
+  const init = {method: 'GET', headers: {Accept: 'application/json'}};
+  const receiver = {name: 'page'};
+  const promise = fakeWindow.fetch.call(receiver, reserveUrl, init);
+  assert.equal(promise, originalPromise);
+  assert.equal(originalReceiver, receiver);
+  assert.equal(originalInit, init);
+  assert.equal(await (await promise).text(), responseBody);
+  await tick();
+  assert.equal(posted[0]?.transport, 'FETCH');
+  assert.equal(posted[0]?.body, responseBody);
+});
+
+test('fetch skips accessor options rather than evaluating method twice', async () => {
+  posted.length = 0;
+  let getterCalls = 0;
+  const init = {get method() { getterCalls += 1; return 'GET'; }};
+  assert.equal(await (await fakeWindow.fetch(reserveUrl, init)).text(), responseBody);
+  await tick();
+  assert.equal(getterCalls, 1);
+  assert.equal(posted.length, 0);
+});
+
+test('redirected responses outside the exact path and HTTP 429 are ignored', async () => {
+  posted.length = 0;
+  for (const url of [officialOrigin + '/sso/login', 'https://other.example/ic-web/reserve']) {
+    fetchOverride = syntheticResponse(url, responseBody);
+    await fakeWindow.fetch(reserveUrl);
+    const xhr = new FakeXhr();
+    xhr.open('GET', reserveUrl);
+    xhr.send();
+    xhr.responseURL = url;
+    xhr.responseText = responseBody;
+    xhr.fire('load');
+  }
+  fetchOverride = syntheticResponse(reserveUrl, 'RATE_LIMIT_TEST_SENTINEL', 429);
+  await fakeWindow.fetch(reserveUrl);
+  await tick();
+  assert.equal(posted.length, 0);
+});
+
+test('exact same-origin 401/403 messages expose status only and preserve page response', async () => {
+  posted.length = 0;
+  const secret = 'TEST_ONLY_PRIVATE_AUTH_RESPONSE';
+  fetchOverride = syntheticResponse(reserveUrl, secret, 401);
+  assert.equal(await (await fakeWindow.fetch(reserveUrl)).text(), secret);
+  await tick();
+  const xhr = new FakeXhr();
+  xhr.open('GET', reserveUrl);
+  xhr.send();
+  xhr.status = 403;
+  xhr.responseText = secret;
+  xhr.fire('load');
+  assert.deepEqual(posted.map(message => message.httpStatus), [401, 403]);
+  assert.ok(posted.every(message => !Object.hasOwn(message, 'body')));
+  assert.ok(!JSON.stringify(posted).includes(secret));
+  assert.ok(Number(posted[0].captureId) < Number(posted[1].captureId));
+});
+
+test('invalid and oversized response bodies produce bounded status-only messages', async () => {
+  posted.length = 0;
+  fetchOverride = syntheticResponse(reserveUrl, 'TEST_ONLY_NON_JSON_PRIVATE_BODY');
+  await fakeWindow.fetch(reserveUrl);
+  await tick();
+  fetchOverride = syntheticResponse(reserveUrl, responseBody, 200, {'Content-Length': String(5 * 1024 * 1024)});
+  await fakeWindow.fetch(reserveUrl);
+  await tick();
+  assert.deepEqual(posted.map(message => message.observationError), ['INVALID_RESPONSE', 'BODY_TOO_LARGE']);
+  assert.ok(posted.every(message => !Object.hasOwn(message, 'body')));
+});
+
+test('decoded fetch stream is capped without truncating the page body', async () => {
+  posted.length = 0;
+  const bytes = new Uint8Array(4 * 1024 * 1024 + 1);
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    },
+  });
+  fetchOverride = syntheticResponse(reserveUrl, stream);
+  const response = await fakeWindow.fetch(reserveUrl);
+  assert.equal((await response.arrayBuffer()).byteLength, bytes.byteLength);
+  await tick();
+  assert.equal(posted[0]?.observationError, 'BODY_TOO_LARGE');
+  assert.ok(!Object.hasOwn(posted[0], 'body'));
+});
+
+test('late body decoding cannot supersede a newer response arrival', async () => {
+  posted.length = 0;
+  let writer!: ReadableStreamDefaultController<Uint8Array>;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) { writer = controller; },
+  });
+  fetchOverride = syntheticResponse(reserveUrl, stream);
+  const first = await fakeWindow.fetch(reserveUrl);
+  await fakeWindow.fetch(reserveUrl);
+  await tick();
+  assert.equal(posted.length, 1);
+  writer.enqueue(new TextEncoder().encode(responseBody));
+  writer.close();
+  assert.equal(await first.text(), responseBody);
+  await tick();
+  assert.equal(posted.length, 1);
+});
+
+function navigate(hash: string): void {
+  fakeLocation.hash = hash;
+  for (const listener of windowListeners.hashchange ?? []) listener({newURL: officialOrigin + '/' + hash});
+}
+
+test('responses cannot cross a prior route or return-to-same-route boundary', async () => {
+  posted.length = 0;
+  navigate(seatRoute + '?TEST_ONLY_QUERY=omitted');
+  const xhr = new FakeXhr();
+  xhr.open('GET', reserveUrl);
+  xhr.send();
+  navigate('#/ic/seatPredetermine/100455856');
+  navigate(seatRoute);
+  xhr.responseText = responseBody;
+  xhr.fire('load');
+  assert.equal(posted.length, 0);
+
+  navigate(seatRoute + '?TEST_ONLY_QUERY=omitted');
+  const current = new FakeXhr();
+  current.open('GET', reserveUrl);
+  current.send();
+  current.responseText = responseBody;
+  current.fire('load');
+  assert.equal(posted[0]?.route, seatRoute);
+  assert.ok(!JSON.stringify(posted).includes('TEST_ONLY_QUERY'));
+  navigate(seatRoute);
 });

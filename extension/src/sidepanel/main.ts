@@ -16,7 +16,7 @@ async function snapshot(){try{const [tab]=await chrome.tabs.query({active:true,c
 document.querySelector('form')!.onsubmit=e=>{e.preventDefault();el('error').textContent='';void send({type:'CREATE',input:{mode:'MOCK',seatId:value('seat'),reservationDate:value('date'),startTime:value('start'),endTime:value('end'),scheduledAt:new Date(value('when')+':00+08:00').getTime()}}).catch(showError)};el('refresh').onclick=()=>void snapshot();chrome.storage.onChanged.addListener(()=>void send({type:'LIST'}).catch(showError));void send({type:'LIST'}).catch(showError);void snapshot();
 
 const productHeader=app.querySelector('header')!;productHeader.after(transferSection);const legacy=document.createElement('details');legacy.className='legacy-tools';const summary=document.createElement('summary');summary.textContent='座位地图、历史数据与研究工具';legacy.append(summary);for(const child of Array.from(app.children)){if(child!==productHeader&&child!==transferSection&&child!==legacy)legacy.append(child)}app.append(legacy);
-productHeader.querySelector('small')!.textContent = 'DLMU LIBRARY ASSISTANT · 2.0';
+productHeader.querySelector('small')!.textContent = 'DLMU LIBRARY ASSISTANT · 2.1';
 productHeader.querySelector('p')!.textContent = '固定座位提醒与预约核对';
 const dailySection = document.createElement('section');
 productHeader.after(dailySection);

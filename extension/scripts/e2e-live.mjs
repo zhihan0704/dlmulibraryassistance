@@ -58,7 +58,8 @@ const seats = snapshot.seats.map((s, i) => ({
       }
     : {}),
 }));
-const reserveBody = JSON.stringify({code: 0, message: '查询成功', data: seats});
+let reserveBody = JSON.stringify({code: 0, message: '查询成功', data: seats});
+let reserveStatus = 200;
 
 const fakePage = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>本地伪造座位页</title></head>
 <body>
@@ -95,7 +96,7 @@ try {
   await context.route('https://seats.dlmu.edu.cn/**', async (route) => {
     const url = route.request().url();
     if (url.includes('/ic-web/reserve')) {
-      return route.fulfill({status: 200, contentType: 'application/json; charset=utf-8', body: reserveBody});
+      return route.fulfill({status: reserveStatus, contentType: 'application/json; charset=utf-8', body: reserveBody});
     }
     return route.fulfill({status: 200, contentType: 'text/html; charset=utf-8', body: fakePage});
   });
@@ -124,6 +125,23 @@ try {
 
   const panelTitle = await panel.title();
   check('侧边栏文档可加载', panelTitle.includes('海大图书馆预约助手'), panelTitle);
+
+  const getLive = (seat = null) => panel.evaluate(async selected => {
+    const [tab] = await chrome.tabs.query({url: 'https://seats.dlmu.edu.cn/*'});
+    return chrome.tabs.sendMessage(tab.id, {type: 'GET_LIVE', seatId: selected?.devId, roomId: selected?.roomId, seatCode: selected?.devName});
+  }, seat);
+  const waitLive = async predicate => {
+    for (let i = 0; i < 60; i++) {
+      const current = await getLive(seats[0]);
+      if (predicate(current)) return current;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    throw new Error('监听状态未达到预期');
+  };
+  const pageFetch = () => page.evaluate(async () => {
+    const response = await fetch('/ic-web/reserve?local=1');
+    return {status: response.status, body: await response.text()};
+  });
 
   const liveReply = await panel.evaluate(async () => {
     const tabs = await chrome.tabs.query({url: 'https://seats.dlmu.edu.cn/*'});
@@ -239,6 +257,68 @@ try {
   await panel.waitForTimeout(1800);
   const domAfter = await panel.locator('#live-dom').innerText();
   check('页面 DOM 变化后侧边栏自动更新', domAfter.includes('141'), domAfter.split('\n').find((l) => l.includes('空闲时段')) ?? '(未见该行)');
+
+  const beforeTitle = await getLive(seats[0]);
+  await page.evaluate(() => document.querySelector('.seat-area .draggable').setAttribute('title', '1D-001\n观察时段 19:30–20:30'));
+  const afterTitle = await waitLive(reply => Boolean(reply.selected.dom));
+  check('单座位 title 变化且页面统计不变时记录目标事件',
+    afterTitle.selected.dom.kind === 'UPDATED' && afterTitle.dom.withFreeIntervals === beforeTitle.dom.withFreeIntervals);
+
+  await page.evaluate(() => document.body.append(Object.assign(document.createElement('p'), {textContent: '无关 DOM 变化'})));
+  await new Promise(resolve => setTimeout(resolve, 450));
+  const unrelated = await getLive(seats[0]);
+  check('无关 DOM 变化不产生新观察或事件', unrelated.dom.at === afterTitle.dom.at && unrelated.eventMonitor.dom.eventCount === afterTitle.eventMonitor.dom.eventCount);
+
+  const changedSeats = seats.map((seat, index) => index === 0 ? {...seat, resvInfo: [
+    {...seat.resvInfo[0], startTime: '2026-11-02 10:00:00', endTime: '2026-11-02 12:00:00'},
+  ]} : seat);
+  reserveBody = JSON.stringify({data: changedSeats});
+  const originalFetch = await pageFetch();
+  const changed = await waitLive(reply => reply.selected.network?.kind === 'UPDATED');
+  check('152 个座位与记录数量不变时捕获目标时段变化', changed.live.summary.total === 152 && changed.live.summary.withResv === WITH_RESV);
+  check('页面 fetch 原始正文保持完整', originalFetch.body === reserveBody && originalFetch.status === 200);
+  await panel.waitForTimeout(450);
+  check('侧栏显示选中座位最新变化', (await panel.locator('#live-selected-change').innerText()).includes('北京时间'));
+
+  reserveBody = JSON.stringify({data: [...changedSeats].reverse()});
+  await pageFetch();
+  const reordered = await waitLive(reply => reply.capturedBy.FETCH === 2 && reply.eventMonitor.network.state === 'UNCHANGED');
+  check('重新排序后只更新观察时间', reordered.eventMonitor.network.eventCount === changed.eventMonitor.network.eventCount &&
+    reordered.eventMonitor.network.lastFreshAt !== changed.eventMonitor.network.lastFreshAt);
+
+  await page.evaluate(() => window.postMessage({channel: 'lsa:want-buffer'}, location.origin));
+  await new Promise(resolve => setTimeout(resolve, 350));
+  const replayed = await getLive(seats[0]);
+  check('重复投递不会增加捕获次数或事件', replayed.capturedCount === reordered.capturedCount &&
+    replayed.eventMonitor.network.eventCount === reordered.eventMonitor.network.eventCount);
+
+  reserveBody = '{broken response}';
+  await pageFetch();
+  const bad = await waitLive(reply => reply.eventMonitor.network.state === 'UNKNOWN' && Boolean(reply.liveError));
+  check('解析失败保留最近成功样本，且新鲜度为待核验', bad.live.snapshot.capturedAt === reordered.live.snapshot.capturedAt &&
+    bad.eventMonitor.network.freshness === 'UNKNOWN' && bad.lastCapturedAt !== bad.live.snapshot.capturedAt);
+
+  reserveStatus = 401;
+  await pageFetch();
+  const lost = await waitLive(reply => reply.session === 'SESSION_LOST');
+  check('认证失效使两个通道暂停有效观察', lost.eventMonitor.network.state === 'SESSION_LOST' && lost.eventMonitor.dom.state === 'SESSION_LOST');
+  reserveStatus = 200;
+  reserveBody = JSON.stringify({data: changedSeats});
+  await pageFetch();
+  const unverified = await waitLive(reply => reply.capturedBy.FETCH === 5);
+  check('未重新核验个人页时新响应仍不可用', unverified.session === 'SESSION_LOST' && unverified.eventMonitor.network.state === 'SESSION_LOST');
+
+  await page.evaluate(() => {
+    location.hash = '#/ic/userinfo';
+    document.body.innerHTML = `<table><thead><tr><th>预约编号</th><th>预约对象</th><th>预约时间</th><th>状态</th></tr></thead>
+    <tbody><tr><td>SYNTHETIC-MONITOR-RECORD</td><td>一楼 预约自习室 D9-99</td><td>开始:2025-01-02 18:00 结束:2025-01-02 20:15</td><td>审核通过</td></tr></tbody></table>`;
+  });
+  const recovered = await waitLive(reply => reply.session === 'REVERIFIED');
+  check('人工恢复条件由个人页新观察解除，旧座位样本已清除', recovered.live === null);
+  await page.goto('https://seats.dlmu.edu.cn/#/ic/seatPredetermine/100455855');
+  await page.reload({waitUntil: 'domcontentloaded'});
+  const resumed = await waitLive(reply => reply.eventMonitor.network.state === 'BASELINE');
+  check('重新进入座位页从新响应建立基线', resumed.live.snapshot.capturedAt !== reordered.live.snapshot.capturedAt);
 } catch (e) {
   check('执行过程未抛异常', false, e.message);
 } finally {

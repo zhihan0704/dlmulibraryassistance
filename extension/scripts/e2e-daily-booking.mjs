@@ -3,6 +3,7 @@ import {mkdir, mkdtemp, realpath, rm, stat} from 'node:fs/promises';
 import {dirname, isAbsolute, join, relative, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright-core';
+import {build} from 'esbuild';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
@@ -148,6 +149,35 @@ try {
   assert.equal((await readState(panel)).state.config.enabled, false);
   assert.equal((await dailyAlarms(panel)).length, 0);
   passed.push('暂停后配置保留，三个每日闹钟全部清除');
+
+  const {outputFiles} = await build({entryPoints: [join(root, 'src/storage/daily-booking-db.ts')],
+    bundle: true, format: 'iife', globalName: 'DailyTest', write: false});
+  const dbPage = await context.newPage();
+  await dbPage.route('http://localhost/daily-idb-fixture', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><title>本地任务测试</title>'}));
+  await dbPage.goto('http://localhost/daily-idb-fixture');
+  await dbPage.addScriptTag({content: outputFiles[0].text});
+  const claims = await dbPage.evaluate(async config => {
+    const first = new DailyTest.DailyBookingRepository('daily-contention-fixture');
+    const second = new DailyTest.DailyBookingRepository('daily-contention-fixture');
+    const state = await first.configure({...config, enabled: true});
+    const now = Date.now(), key = '2025-01-02|daily-fixed-seat|synthetic-target|OPEN';
+    const tokens = await Promise.all([first.claim(state.revision, key, now), second.claim(state.revision, key, now)]);
+    const token = tokens.find(Boolean);
+    if (!token) return {tokens};
+    const navigation = await Promise.all([first.reserveNavigation(state.revision, key, token, now), second.reserveNavigation(state.revision, key, token, now)]);
+    const result = {phase: 'OPEN', day: '2025-01-02', targetDate: '2025-01-03', at: now, message: '本地合成检查', pending: true};
+    const finishes = await Promise.all([first.finish(state.revision, key, token, result, now, true), second.finish(state.revision, key, token, result, now, true)]);
+    const revised = await second.configure({...config, enabled: true});
+    const next = await second.claim(revised.revision, key, now + 4000);
+    const oldRejected = await first.finish(state.revision, key, token, result, now + 4000, true);
+    return {leases: tokens.filter(Boolean).length, navigations: navigation.filter(Boolean).length,
+      reminders: finishes.filter(finish => finish.reminder).length, oldRejected: !oldRejected.saved,
+      repeatNavigation: await second.reserveNavigation(revised.revision, key, next, now + 4000),
+      repeatReminder: (await second.finish(revised.revision, key, next, result, now + 4000, true)).reminder};
+  }, bound.config);
+  assert.deepEqual(claims, {leases: 1, navigations: 1, reminders: 1, oldRejected: true, repeatNavigation: false, repeatReminder: false});
+  passed.push('两个真实 IndexedDB 连接竞争时只领取一次，改绑后旧凭据与重复通知仍被阻断');
+  await dbPage.close();
   assert.ok(requests.some(request => request.path === '/ic-web/reserve'));
   assert.ok(requests.every(request => request.method === 'GET' && request.origin === origin));
   passed.push('全部学校请求在本地拦截，流程没有发出非 GET 请求');

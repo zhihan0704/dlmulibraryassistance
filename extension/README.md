@@ -1,4 +1,8 @@
-# DLMU Library Assistant 2.0
+# DLMU Library Assistant 2.1
+
+侧栏「实时监听」对学校网页自然收到的响应和前台座位 DOM 分别做逐座位比较。总数相同也能发现时段变化。界面显示北京时间下的捕获、观察、最近变化和过期状态。「读取当前页面缓存」不重新加载学校页面。识别认证中断后暂停有效观察，完成学校人工登录并读取有效个人预约后，从新的座位数据重新建立基线。
+
+2.1 仍为辅助模式。真实座位的可预约性、WebSocket / SSE、实际启动与唤醒等待人工核验。扩展不提交预约，也不发起主动监测请求。参见[架构](docs/realtime-monitoring-architecture.md)、[人工验证](docs/live-data-channel.md)和[验收](reports/realtime-monitoring-acceptance.md)。
 
 ## 每日固定座位预约助手
 
