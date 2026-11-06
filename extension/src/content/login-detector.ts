@@ -1,0 +1,1 @@
+export function detectLogin(){return 'UNKNOWN' as const}

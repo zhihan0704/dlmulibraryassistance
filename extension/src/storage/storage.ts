@@ -1,0 +1,1 @@
+import type {ReservationTask} from '../shared/types';import {TASK_KEY} from '../shared/constants';export async function load():Promise<ReservationTask[]>{return (await chrome.storage.local.get(TASK_KEY))[TASK_KEY]??[]} export async function save(tasks:ReservationTask[]){await chrome.storage.local.set({[TASK_KEY]:tasks})}

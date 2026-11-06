@@ -1,0 +1,1 @@
+export function verifyMock(id:string,records:{seatId:string}[]){return records.some(r=>r.seatId===id)}

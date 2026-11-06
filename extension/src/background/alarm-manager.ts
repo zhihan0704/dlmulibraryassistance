@@ -1,0 +1,1 @@
+import type {ReservationTask} from '../shared/types';export async function schedule(tasks:ReservationTask[]){await chrome.alarms.clear('lsa-wake');const times=tasks.filter(t=>!t.paused&&t.status==='WAITING').map(t=>t.scheduledAt);if(times.length)await chrome.alarms.create('lsa-wake',{when:Math.max(Date.now()+1000,Math.min(...times))})}

@@ -1,0 +1,1 @@
+import type {Seat} from '../shared/types'; export interface LibraryAdapter {detectPage():Promise<boolean>;getCurrentRoom():Promise<string|null>;getSeats():Promise<Seat[]>;getSeatStatus(id:string):Promise<string>;getReservationRules():Promise<'UNKNOWN'|'MOCK_ONLY'|'NEEDS_REVIEW'>;getMyReservations():Promise<{seatId:string}[]>;}

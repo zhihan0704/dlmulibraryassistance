@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.log
+
+mobile-dist/
+.release-tests/
+release/
+reports/evidence/
+research/

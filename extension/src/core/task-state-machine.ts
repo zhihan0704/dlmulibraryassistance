@@ -1,0 +1,3 @@
+import type {Status,ReservationTask} from '../shared/types';
+const edges:Partial<Record<Status,Status[]>>={DRAFT:['WAITING'],WAITING:['CHECKING','CANCELLED'],CHECKING:['AUTH_REQUIRED','READY','NEEDS_REVIEW','FAILED'],READY:['EXECUTING','NEEDS_REVIEW'],EXECUTING:['VERIFYING','NEEDS_REVIEW'],VERIFYING:['SUCCESS','FAILED','NEEDS_REVIEW'],AUTH_REQUIRED:['WAITING','CANCELLED'],NEEDS_REVIEW:['WAITING','CANCELLED'],FAILED:['CANCELLED']};
+export function transition(t:ReservationTask,to:Status,message:string){if(!edges[t.status]?.includes(to))throw Error('非法状态转换');t.status=to;t.updatedAt=new Date().toISOString();t.logs.push({at:t.updatedAt,message});}

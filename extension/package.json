@@ -1,0 +1,33 @@
+{
+  "name": "library-seat-assistant",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && vite build && vite build --config vite.content.config.ts && vite build --config vite.hook.config.ts",
+    "test": "tsx --test tests/checkin-core.test.ts tests/core.test.ts tests/event-monitor.test.ts tests/hook.test.ts tests/live.test.ts tests/notification-manager.test.ts tests/personal-records.test.ts tests/phase4.test.ts tests/preview.test.ts tests/product-security.test.ts tests/rule-model.test.ts tests/seat-reader.test.ts tests/session-recovery.test.ts tests/storage.test.ts tests/transfer.test.ts tests/daily-booking-scheduler.test.ts tests/daily-observations.test.ts tests/dynamic-booking.test.ts",
+    "test:history": "tsx --test tests/free-time.test.ts tests/phase6.test.ts tests/phase7.test.ts tests/seat-status.test.ts",
+    "test:daily:edge": "node scripts/e2e-daily-booking.mjs",
+    "check": "node scripts/check-extension.mjs",
+    "test:e2e": "npm run build && node scripts/e2e-live.mjs",
+    "test:restart": "npm run build && node scripts/e2e-restart.mjs",
+    "build:mobile": "tsc --noEmit && vite build --config vite.mobile.config.ts",
+    "test:mobile": "node scripts/e2e-mobile.mjs",
+    "test:product": "node scripts/e2e-product.mjs",
+    "test:extension-product": "node scripts/e2e-extension-product.mjs",
+    "verify": "npm test && npm run build && npm run check && npm run build:mobile",
+    "serve:mobile": "node scripts/serve-mobile.mjs"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.310",
+    "@types/node": "^22.0.0",
+    "@types/qrcode": "^1.5.6",
+    "playwright-core": "^1.64.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0",
+    "vite": "^6.1.0"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  }
+}

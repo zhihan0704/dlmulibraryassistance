@@ -1,0 +1,3 @@
+import type {LibraryAdapter} from './library-adapter'; import type {Seat} from '../shared/types';
+export const mockSeats=():Seat[]=>['DEMO-01','DEMO-02','DEMO-03'].map(id=>({id,name:'模拟座位 '+id,roomId:'MOCK-ROOM',status:'AVAILABLE',position:null,updatedAt:new Date().toISOString(),source:'MOCK'}));
+export class MockAdapter implements LibraryAdapter {async detectPage(){return true} async getCurrentRoom(){return 'MOCK-ROOM'} async getSeats(){return mockSeats()} async getSeatStatus(id:string){return mockSeats().some(s=>s.id===id)?'AVAILABLE':'UNKNOWN'} async getReservationRules(){return 'MOCK_ONLY' as const} async getMyReservations(){return []}}

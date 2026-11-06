@@ -1,0 +1,6 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';
+import {NotificationManager} from '../src/core/notification-manager';
+const plan={id:'one',reservationId:'test',kind:'prepare' as const,at:'2026-11-05T09:00:00Z',title:'准备',message:'携带校园卡'};
+test('通知重复触发和并发检查只交付一次',async()=>{const sent:string[]=[];const claimed=new Set<string>();const repo={dueNotifications:async()=>[plan],claimNotification:async(p:typeof plan)=>{if(claimed.has(p.id))return false;claimed.add(p.id);return true}};const manager=new NotificationManager(repo,async p=>{sent.push(p.id)});await Promise.all([manager.check(),manager.check()]);assert.deepEqual(sent,['one'])});
+test('通知失败不宣称送达，不盲目重复弹出',async()=>{let claim=true;const repo={dueNotifications:async()=>[plan],claimNotification:async()=>{const result=claim;claim=false;return result}};const manager=new NotificationManager(repo,async()=>{throw Error('系统拒绝')});assert.deepEqual(await manager.check(),{delivered:0,failed:1});assert.deepEqual(await manager.check(),{delivered:0,failed:0})});
+test('系统时钟异常拒绝通知计划',async()=>{const manager=new NotificationManager({dueNotifications:async()=>[],claimNotification:async()=>true},async()=>{});await assert.rejects(manager.check(NaN))});

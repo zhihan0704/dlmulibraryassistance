@@ -1,0 +1,1 @@
+export type Request = {type:'LIST'}|{type:'CREATE';input:unknown}|{type:'ACTION';id:string;action:'pause'|'resume'|'cancel'}|{type:'SNAPSHOT'};

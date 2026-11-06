@@ -1,0 +1,1 @@
+export const TARGET='https://seats.dlmu.edu.cn/'; export const ROOM='100455855'; export const TASK_KEY='lsa.tasks.v1';

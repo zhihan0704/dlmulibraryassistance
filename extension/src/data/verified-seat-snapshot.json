@@ -1,0 +1,1391 @@
+{
+  "observedAt": "2026-11-01T10:23:50.875Z",
+  "path": "/ic-web/reserve",
+  "sourceSha256": "596645d0fc0aeb6272dbc6ddff4b105a834c4a640245868310e668ff9970591b",
+  "resvInfoSchema": {
+    "type": "array",
+    "length": 1,
+    "item": {
+      "uuid": "string",
+      "resvId": "number",
+      "startTime": "string",
+      "endTime": "string",
+      "title": "object",
+      "trueName": "object",
+      "logonName": "object",
+      "resvStatus": "number",
+      "resvEndRealTime": "object",
+      "devId": "number"
+    }
+  },
+  "seats": [
+    {
+      "devId": 100456941,
+      "devName": "1D-001",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "3.370787,33.133733",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456942,
+      "devName": "1D-002",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "3.370787,40.718563",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456943,
+      "devName": "1D-003",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "3.370787,47.305389",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456944,
+      "devName": "1D-004",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "3.370787,53.093812",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456945,
+      "devName": "1D-005",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "3.370787,59.680639",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456946,
+      "devName": "1D-006",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "3.370787,66.467066",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456947,
+      "devName": "1D-007",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "3.370787,75.249501",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456948,
+      "devName": "1D-008",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "3.370787,80.439122",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456949,
+      "devName": "1D-009",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "9.213483,37.724551",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456950,
+      "devName": "1D-010",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "9.213483,51.497006",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456951,
+      "devName": "1D-011",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "8.988764,64.670659",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456952,
+      "devName": "1D-012",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "9.213483,78.243513",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456953,
+      "devName": "1D-013",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "14.606742,32.934132",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456954,
+      "devName": "1D-014",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "14.606742,39.920160",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456955,
+      "devName": "1D-015",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "14.606742,46.307385",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456956,
+      "devName": "1D-016",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "14.606742,53.493014",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456957,
+      "devName": "1D-017",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "14.606742,59.680639",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456958,
+      "devName": "1D-018",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "14.606742,66.666667",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456959,
+      "devName": "1D-019",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "14.606742,73.453094",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456960,
+      "devName": "1D-020",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "14.606742,80.838323",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456961,
+      "devName": "1D-021",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "20.224719,80.838323",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456962,
+      "devName": "1D-022",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "20.224719,73.453094",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456963,
+      "devName": "1D-023",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "20.224719,66.666667",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456964,
+      "devName": "1D-024",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "20.224719,59.680639",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456965,
+      "devName": "1D-025",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "20.224719,53.493014",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456966,
+      "devName": "1D-026",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "20.224719,46.307385",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456967,
+      "devName": "1D-027",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "20.224719,39.920160",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456968,
+      "devName": "1D-028",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "20.224719,32.934132",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456969,
+      "devName": "1D-029",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "24.606742,32.934132",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456970,
+      "devName": "1D-030",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "24.606742,39.920160",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456971,
+      "devName": "1D-031",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "24.606742,46.307385",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456972,
+      "devName": "1D-032",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "24.606742,53.493014",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456973,
+      "devName": "1D-033",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "24.606742,59.680639",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456974,
+      "devName": "1D-034",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "24.606742,66.666667",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456975,
+      "devName": "1D-035",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "24.606742,73.453094",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456976,
+      "devName": "1D-036",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "24.606742,80.838323",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456977,
+      "devName": "1D-037",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "30.112360,80.838323",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456978,
+      "devName": "1D-038",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "30.112360,73.453094",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456979,
+      "devName": "1D-039",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "30.112360,66.666667",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456980,
+      "devName": "1D-040",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "30.112360,59.680639",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456981,
+      "devName": "1D-041",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "30.112360,53.493014",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456982,
+      "devName": "1D-042",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "30.112360,46.307385",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456983,
+      "devName": "1D-043",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "30.112360,39.920160",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456984,
+      "devName": "1D-044",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "30.112360,32.934132",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456985,
+      "devName": "1D-045",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "36.404494,25.748503",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456986,
+      "devName": "1D-046",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "36.404494,32.934132",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456987,
+      "devName": "1D-047",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "36.404494,39.920160",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456988,
+      "devName": "1D-048",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "36.404494,46.307385",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456989,
+      "devName": "1D-049",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "36.404494,53.493014",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456990,
+      "devName": "1D-050",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "36.404494,59.680639",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456991,
+      "devName": "1D-051",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "36.404494,66.666667",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456992,
+      "devName": "1D-052",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "36.404494,73.453094",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456993,
+      "devName": "1D-053",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "36.404494,80.838323",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456994,
+      "devName": "1D-054",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "42.022472,80.838323",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456995,
+      "devName": "1D-055",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "42.022472,73.453094",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456996,
+      "devName": "1D-056",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "42.022472,66.666667",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456997,
+      "devName": "1D-057",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "42.022472,59.680639",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456998,
+      "devName": "1D-058",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "42.022472,53.493014",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100456999,
+      "devName": "1D-059",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "42.022472,46.307385",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457000,
+      "devName": "1D-060",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "42.022472,39.920160",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457001,
+      "devName": "1D-061",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "42.022472,32.934132",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457002,
+      "devName": "1D-062",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "42.022472,25.748503",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457003,
+      "devName": "1D-063",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "46.741573,25.748503",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457004,
+      "devName": "1D-064",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "46.741573,32.934132",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457005,
+      "devName": "1D-065",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "46.741573,39.920160",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457006,
+      "devName": "1D-066",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "46.741573,46.307385",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457007,
+      "devName": "1D-067",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "46.741573,53.493014",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457008,
+      "devName": "1D-068",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "46.741573,59.680639",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457009,
+      "devName": "1D-069",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "46.741573,66.666667",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457010,
+      "devName": "1D-070",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "46.741573,73.453094",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457011,
+      "devName": "1D-071",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "46.741573,80.838323",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457012,
+      "devName": "1D-072",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "52.359551,80.838323",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457013,
+      "devName": "1D-073",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "52.359551,73.453094",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457014,
+      "devName": "1D-074",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "52.359551,66.666667",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457015,
+      "devName": "1D-075",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "52.359551,59.680639",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457016,
+      "devName": "1D-076",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "52.359551,53.493014",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457017,
+      "devName": "1D-077",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "52.359551,46.307385",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457018,
+      "devName": "1D-078",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "52.359551,39.920160",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457019,
+      "devName": "1D-079",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "52.359551,32.934132",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457020,
+      "devName": "1D-080",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "52.359551,25.748503",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457021,
+      "devName": "1D-081",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "57.640449,25.748503",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457022,
+      "devName": "1D-082",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "57.640449,32.934132",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457023,
+      "devName": "1D-083",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "57.640449,39.920160",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457024,
+      "devName": "1D-084",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "57.640449,46.307385",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457025,
+      "devName": "1D-085",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "57.640449,53.493014",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457026,
+      "devName": "1D-086",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "57.640449,59.680639",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457027,
+      "devName": "1D-087",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "57.640449,66.666667",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457028,
+      "devName": "1D-088",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "57.640449,73.453094",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457029,
+      "devName": "1D-089",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "57.640449,80.838323",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457030,
+      "devName": "1D-090",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "63.370787,80.838323",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457031,
+      "devName": "1D-091",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "63.370787,73.453094",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457032,
+      "devName": "1D-092",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "63.370787,66.666667",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457033,
+      "devName": "1D-093",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "63.370787,59.680639",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457034,
+      "devName": "1D-094",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "63.370787,53.493014",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457035,
+      "devName": "1D-095",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "63.370787,46.307385",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457036,
+      "devName": "1D-096",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "63.370787,39.920160",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457037,
+      "devName": "1D-097",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "63.370787,32.934132",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457038,
+      "devName": "1D-098",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "63.370787,25.748503",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457039,
+      "devName": "1D-099",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "67.528090,25.748503",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457040,
+      "devName": "1D-100",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "67.528090,32.934132",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457041,
+      "devName": "1D-101",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "67.528090,39.920160",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457042,
+      "devName": "1D-102",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "67.528090,46.307385",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457043,
+      "devName": "1D-103",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "67.528090,53.493014",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457044,
+      "devName": "1D-104",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "67.528090,59.680639",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457045,
+      "devName": "1D-105",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "67.528090,66.666667",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457046,
+      "devName": "1D-106",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "67.528090,73.453094",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457047,
+      "devName": "1D-107",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "67.528090,80.838323",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457048,
+      "devName": "1D-108",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "73.483146,80.838323",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457049,
+      "devName": "1D-109",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "73.483146,73.453094",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457050,
+      "devName": "1D-110",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "73.483146,66.666667",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457051,
+      "devName": "1D-111",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "73.483146,59.680639",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457052,
+      "devName": "1D-112",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "73.483146,53.493014",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457053,
+      "devName": "1D-113",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "73.483146,46.307385",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457054,
+      "devName": "1D-114",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "73.483146,39.920160",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457055,
+      "devName": "1D-115",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "73.483146,32.934132",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457056,
+      "devName": "1D-116",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "73.483146,25.748503",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457057,
+      "devName": "1D-117",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "77.640449,25.748503",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457058,
+      "devName": "1D-118",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "77.640449,32.934132",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457059,
+      "devName": "1D-119",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "77.640449,39.920160",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457060,
+      "devName": "1D-120",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "77.640449,46.307385",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457061,
+      "devName": "1D-121",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "77.640449,53.493014",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457062,
+      "devName": "1D-122",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "77.640449,59.680639",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457063,
+      "devName": "1D-123",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "77.640449,66.666667",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457064,
+      "devName": "1D-124",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "77.640449,73.453094",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457065,
+      "devName": "1D-125",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "77.640449,80.838323",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457066,
+      "devName": "1D-126",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "83.370787,80.838323",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457067,
+      "devName": "1D-127",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "83.370787,73.453094",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457068,
+      "devName": "1D-128",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "83.370787,66.666667",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457069,
+      "devName": "1D-129",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "83.370787,59.680639",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457070,
+      "devName": "1D-130",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "83.370787,53.493014",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457071,
+      "devName": "1D-131",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "83.370787,46.307385",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457072,
+      "devName": "1D-132",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "83.370787,39.920160",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457073,
+      "devName": "1D-133",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "83.370787,32.934132",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457074,
+      "devName": "1D-134",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "83.370787,25.748503",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457075,
+      "devName": "1D-135",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "87.640449,25.748503",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457076,
+      "devName": "1D-136",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "87.640449,32.934132",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457077,
+      "devName": "1D-137",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "87.640449,39.920160",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457078,
+      "devName": "1D-138",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "87.640449,46.307385",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457079,
+      "devName": "1D-139",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "87.640449,53.493014",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100457080,
+      "devName": "1D-140",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "87.640449,59.680639",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100458641,
+      "devName": "1D-141",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "87.640449,66.666667",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100458642,
+      "devName": "1D-142",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "87.640449,73.453094",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100458643,
+      "devName": "1D-143",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "87.640449,80.838323",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100458644,
+      "devName": "1D-144",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "93.595506,80.838323",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100458645,
+      "devName": "1D-145",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "93.595506,73.453094",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100458646,
+      "devName": "1D-146",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "93.595506,66.666667",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100458647,
+      "devName": "1D-147",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "93.595506,59.680639",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100458648,
+      "devName": "1D-148",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "93.595506,53.493014",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100458649,
+      "devName": "1D-149",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "93.595506,46.307385",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100458650,
+      "devName": "1D-150",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "93.595506,39.920160",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100458651,
+      "devName": "1D-151",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "93.595506,32.934132",
+      "devStatus": 0,
+      "openState": 1
+    },
+    {
+      "devId": 100458652,
+      "devName": "1D-152",
+      "roomId": 100455855,
+      "roomName": "电子阅览室",
+      "coordinate": "93.595506,25.748503",
+      "devStatus": 0,
+      "openState": 1
+    }
+  ]
+}

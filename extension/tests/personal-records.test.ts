@@ -1,0 +1,6 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {parsePersonalCells,explicitOfficialConfirmation} from '../src/content/personal-records';
+const indexes={'预约编号':1,'预约对象':2,'预约时间':3,'状态':4};const at='2025-01-02T09:00:00Z';const row=['','TEST-ONLY-very-long-arbitrary-id','一楼\n预约自习室\nD1-01','开始:2025-01-02 18:00 结束:2025-01-02 20:15','审核通过'];
+test('完整预约按实际表头定位，不依赖编号长度',()=>{const r=parsePersonalCells(row,indexes,at)!;assert.equal(r.id,row[1]);assert.equal(r.roomName,'预约自习室');assert.equal(r.seatCode,'D1-01');assert.equal(r.startAt,'2025-01-02T18:00:00+08:00');assert.equal(r.officialConfirmed,false)});
+test('截断编号、缺失区域和非法日期拒绝',()=>{for(const values of [[1,'TEST-ONLY...'],[1,'TEST-ONLY…'],[2,'D1-01'],[3,'开始:2026-02-31 18:00 结束:2026-02-31 20:15']] as const){const input=[...row];input[values[0]]=values[1];assert.equal(parsePersonalCells(input,indexes,at),null)}});
+test('跨日预约保留实际结束日期',()=>{const r=parsePersonalCells([...row.slice(0,3),'开始:2025-01-02 23:30 结束:2025-01-03 01:00','审核通过'],indexes,at)!;assert.equal(r.endAt,'2025-01-03T01:00:00+08:00')});
+test('明确官方文字可确认，审核通过、原始位值和否定语句不能确认',()=>{assert.ok(explicitOfficialConfirmation('已签到'));for(const value of ['审核通过','未签到','1027','1029','1093','未开始 审核通过','签到成功？'])assert.equal(explicitOfficialConfirmation(value),false)});

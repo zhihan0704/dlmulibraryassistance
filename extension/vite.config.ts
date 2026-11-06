@@ -1,0 +1,1 @@
+import {defineConfig} from 'vite'; import {resolve} from 'node:path'; export default defineConfig({base:'./',build:{rollupOptions:{input:{panel:resolve('src/sidepanel/index.html'),worker:resolve('src/background/service-worker.ts')},output:{entryFileNames:c=>c.name==='worker'?'service-worker.js':'assets/[name].js'}}}});

@@ -1,0 +1,1 @@
+export function isTarget(url:string){try{return new URL(url).origin==='https://seats.dlmu.edu.cn'}catch{return false}}

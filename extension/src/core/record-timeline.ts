@@ -1,0 +1,4 @@
+export interface RecordKey{reservationId:string;seat:string;date:string;start:string;end:string}
+export interface RecordSnapshot{key:RecordKey;observedAt:string;resvStatus:unknown;resvInfo:unknown}
+const keyOf=(k:RecordKey)=>JSON.stringify([k.reservationId,k.seat,k.date,k.start,k.end]);
+export function compareCheckin(before:RecordSnapshot,after:RecordSnapshot){if(!before.key.reservationId||keyOf(before.key)!==keyOf(after.key))throw Error('预约身份不匹配');if(!Number.isFinite(Date.parse(before.observedAt))||!Number.isFinite(Date.parse(after.observedAt))||Date.parse(after.observedAt)<Date.parse(before.observedAt))throw Error('观察时间无效');const fields=['resvStatus','resvInfo'] as const;return {key:before.key,beforeAt:before.observedAt,afterAt:after.observedAt,confidence:'OBSERVED_UNVERIFIED' as const,changes:fields.filter(k=>JSON.stringify(before[k])!==JSON.stringify(after[k])).map(field=>({field,before:before[field],after:after[field]}))}}

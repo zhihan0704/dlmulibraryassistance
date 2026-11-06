@@ -1,0 +1,62 @@
+{
+  "manifest_version": 3,
+  "name": "DLMU Library Assistant",
+  "version": "2.0.0",
+  "minimum_chrome_version": "111",
+  "description": "每日固定座位提醒、个人预约核对和现场签到准备",
+  "permissions": [
+    "storage",
+    "alarms",
+    "sidePanel",
+    "activeTab",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://seats.dlmu.edu.cn/*"
+  ],
+  "action": {
+    "default_title": "打开预约助手",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "src/sidepanel/index.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://seats.dlmu.edu.cn/*"
+      ],
+      "js": [
+        "hook.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://seats.dlmu.edu.cn/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'none'"
+  }
+}

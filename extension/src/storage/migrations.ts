@@ -1,0 +1,1 @@
+export const SCHEMA_VERSION=1; // 新版本迁移须保留现有任务，不静默重置。
