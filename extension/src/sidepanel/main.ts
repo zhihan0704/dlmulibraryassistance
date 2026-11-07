@@ -1,5 +1,6 @@
 import {mountTransfer} from './mobile-transfer';
 import {mountDailyBooking} from './daily-booking-panel';
+import {mountAssistantPanel} from './assistant-panel';
 import {mountSeatMap} from './seat-map';import {mountLivePanel} from './live-panel';
 import './style.css';import {mockSeats} from '../adapters/mock-adapter';import type {ReservationTask} from '../shared/types';
 const app=document.querySelector('#app')!;app.innerHTML=`<header><small>DLMU LIBRARY ASSISTANT · 1.0</small><h1>海大图书馆助手</h1><p>准备行程，带上校园卡</p></header><section><h2>系统状态</h2><p id="site">正在识别网站…</p><p>登录：UNKNOWN · 电子阅览室：UNKNOWN</p><p class="waiting">等待获取真实座位数据</p><p>自动化：仅本地模拟，真实执行已禁用</p><button id="refresh">刷新页面状态</button><small id="updated"></small></section><section><h2>创建预约任务</h2><p>目标：一楼 · 电子阅览室</p><p class="waiting">演示数据与真实座位无关</p><form><label>执行方式<select><option>模拟预约（不访问接口）</option></select></label><label>模拟座位<select id="seat"></select></label><label>预约日期（北京时间）<input id="date" type="date" required></label><div class="row"><label>开始<input id="start" type="time" value="09:00" required></label><label>结束<input id="end" type="time" value="10:00" required></label></div><label>计划执行（北京时间）<input id="when" type="datetime-local" required></label><p class="muted">备注暂不保存，请勿输入个人信息。浏览器关闭期间无法执行，重开后检查。</p><button class="primary">创建模拟任务</button></form><p id="error" role="alert"></p></section><section><h2>任务列表</h2><div id="tasks"></div></section><section><h2>执行日志</h2><p class="muted">点击任务“查看日志”，仅展示本地模拟事件。</p><pre id="logs"></pre></section>`;
@@ -16,8 +17,9 @@ async function snapshot(){try{const [tab]=await chrome.tabs.query({active:true,c
 document.querySelector('form')!.onsubmit=e=>{e.preventDefault();el('error').textContent='';void send({type:'CREATE',input:{mode:'MOCK',seatId:value('seat'),reservationDate:value('date'),startTime:value('start'),endTime:value('end'),scheduledAt:new Date(value('when')+':00+08:00').getTime()}}).catch(showError)};el('refresh').onclick=()=>void snapshot();chrome.storage.onChanged.addListener(()=>void send({type:'LIST'}).catch(showError));void send({type:'LIST'}).catch(showError);void snapshot();
 
 const productHeader=app.querySelector('header')!;productHeader.after(transferSection);const legacy=document.createElement('details');legacy.className='legacy-tools';const summary=document.createElement('summary');summary.textContent='座位地图、历史数据与研究工具';legacy.append(summary);for(const child of Array.from(app.children)){if(child!==productHeader&&child!==transferSection&&child!==legacy)legacy.append(child)}app.append(legacy);
-productHeader.querySelector('small')!.textContent = 'DLMU LIBRARY ASSISTANT · 2.1';
-productHeader.querySelector('p')!.textContent = '固定座位提醒与预约核对';
+productHeader.querySelector('small')!.textContent = 'DLMU LIBRARY ASSISTANT · 2.2';
+productHeader.querySelector('p')!.textContent = '日期计划、座位观察与预约核对';
 const dailySection = document.createElement('section');
 productHeader.after(dailySection);
 mountDailyBooking(dailySection);
+mountAssistantPanel(dailySection, liveSection);

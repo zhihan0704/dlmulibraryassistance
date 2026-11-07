@@ -1,5 +1,5 @@
 import {findFreeIntervals} from './free-interval-engine';
-import {covers, DEFAULT_AVAILABILITY_AGE_MS, inspectSeatTimeline, parseInstant, parseTimeRange, sameSeat, type InspectionContext, type SeatTarget, type SeatTimelineObservation, type TimeRange} from './seat-timeline';
+import {covers, DEFAULT_AVAILABILITY_AGE_MS, inspectSeatTimeline, parseInstant, parseTimeRange, sameSeat, type InspectionContext, type MillisecondRange, type SeatTarget, type SeatTimelineObservation, type TimeRange, type VerifiedSeatTimeline} from './seat-timeline';
 
 export type VerifiedPolicySource = 'OFFICIAL_RULES' | 'OFFICIAL_ELIGIBILITY' | 'MOCK';
 interface TimedEvidence {
@@ -7,7 +7,7 @@ interface TimedEvidence {
   observedAt: string;
   appliesTo: TimeRange;
 }
-export type BookingRuleEvidence = {kind: 'UNKNOWN' | 'CONFLICT'} | (TimedEvidence & {
+export interface VerifiedBookingRules extends TimedEvidence {
   kind: 'VERIFIED';
   source: 'OFFICIAL_RULES' | 'MOCK';
   roomId: number;
@@ -15,19 +15,22 @@ export type BookingRuleEvidence = {kind: 'UNKNOWN' | 'CONFLICT'} | (TimedEvidenc
   maxDurationMinutes: number;
   startStepMinutes: number;
   stepAnchorAt: string;
-});
+}
+export type BookingRuleEvidence = {kind: 'UNKNOWN' | 'CONFLICT'} | VerifiedBookingRules;
 export type EligibilityEvidence = {kind: 'UNKNOWN'} | (TimedEvidence & {
   kind: 'VERIFIED';
   source: 'OFFICIAL_ELIGIBILITY' | 'MOCK';
   target: SeatTarget;
   eligible: boolean;
 });
-export interface DynamicBookingInput extends InspectionContext {
-  preferred: TimeRange;
-  dynamicTime: {enabled: false} | {enabled: true; window: TimeRange};
+export interface BookingEvidenceInput extends InspectionContext {
   observation: SeatTimelineObservation | null;
   rules: BookingRuleEvidence;
   eligibility: EligibilityEvidence;
+}
+export interface DynamicBookingInput extends BookingEvidenceInput {
+  preferred: TimeRange;
+  dynamicTime: {enabled: false} | {enabled: true; window: TimeRange};
 }
 export interface BookingSuggestion {
   target: SeatTarget;
@@ -49,8 +52,40 @@ function freshEvidence(evidence: TimedEvidence, context: InspectionContext): boo
   return typeof evidence.evidenceRef === 'string' && evidence.evidenceRef.trim().length > 0 &&
     observed !== null && observed <= context.now && context.now - observed <= (context.maxAgeMs ?? DEFAULT_AVAILABILITY_AGE_MS);
 }
-function alignedAtOrAfter(instant: number, anchor: number, step: number): number {
+export function alignedAtOrAfter(instant: number, anchor: number, step: number): number {
   return anchor + Math.ceil((instant - anchor) / step) * step;
+}
+
+export type BookingEvidenceInspection =
+  | {state: 'VERIFIED'; timeline: VerifiedSeatTimeline; rules: VerifiedBookingRules; anchor: number}
+  | {state: 'UNKNOWN' | 'STALE' | 'SESSION_LOST' | 'NEEDS_REVIEW' | 'INELIGIBLE'; reason: string};
+
+/** Shared evidence gates for fixed-seat and intelligent time suggestions. */
+export function inspectBookingEvidence(input: BookingEvidenceInput, window: MillisecondRange): BookingEvidenceInspection {
+  const inspected = inspectSeatTimeline(input.observation, input);
+  if (inspected.state !== 'VERIFIED') return inspected;
+  const rules = input.rules;
+  if (rules.kind === 'CONFLICT') return {state: 'NEEDS_REVIEW', reason: '预约规则存在未解决冲突'};
+  if (rules.kind !== 'VERIFIED' || rules.roomId !== input.target.roomId ||
+      rules.source !== (input.mode === 'MOCK' ? 'MOCK' : 'OFFICIAL_RULES') || !freshEvidence(rules, input)) {
+    return {state: 'UNKNOWN', reason: '预约规则来源、时效或范围未确认'};
+  }
+  const ruleWindow = parseTimeRange(rules.appliesTo);
+  const anchor = parseInstant(rules.stepAnchorAt);
+  if (!ruleWindow || !covers(ruleWindow, window) || anchor === null ||
+      ![rules.minDurationMinutes, rules.maxDurationMinutes, rules.startStepMinutes].every(v => Number.isSafeInteger(v) && v > 0 && v <= 1440) ||
+      rules.minDurationMinutes > rules.maxDurationMinutes) {
+    return {state: 'UNKNOWN', reason: '规则没有覆盖完整时段或缺少可核验的时长及对齐参数'};
+  }
+  const eligibility = input.eligibility;
+  if (eligibility.kind !== 'VERIFIED' || !sameSeat(eligibility.target, input.target) ||
+      eligibility.source !== (input.mode === 'MOCK' ? 'MOCK' : 'OFFICIAL_ELIGIBILITY') || !freshEvidence(eligibility, input)) {
+    return {state: 'UNKNOWN', reason: '本座位预约资格尚未确认'};
+  }
+  const eligibilityWindow = parseTimeRange(eligibility.appliesTo);
+  if (!eligibilityWindow || !covers(eligibilityWindow, window) || typeof eligibility.eligible !== 'boolean') return {state: 'UNKNOWN', reason: '资格证据不覆盖整个时段'};
+  if (!eligibility.eligible) return {state: 'INELIGIBLE', reason: '已核验证据显示不具备预约资格'};
+  return {state: 'VERIFIED', timeline: inspected.timeline, rules, anchor};
 }
 
 /** A recommendation only. No action, request, fallback seat, or guessed availability. */
@@ -59,29 +94,9 @@ export function evaluateDynamicBooking(input: DynamicBookingInput): DynamicBooki
   const allowedWindow = input.dynamicTime.enabled ? input.dynamicTime.window : input.preferred;
   const window = parseTimeRange(allowedWindow);
   if (!preferred || !window || !covers(window, preferred)) return no('UNKNOWN', '预约时段或允许的调整范围无效');
-  const inspected = inspectSeatTimeline(input.observation, input);
+  const inspected = inspectBookingEvidence(input, window);
   if (inspected.state !== 'VERIFIED') return no(inspected.state, inspected.reason);
-  const rules = input.rules;
-  if (rules.kind === 'CONFLICT') return no('NEEDS_REVIEW', '预约规则存在未解决冲突');
-  if (rules.kind !== 'VERIFIED' || rules.roomId !== input.target.roomId ||
-      rules.source !== (input.mode === 'MOCK' ? 'MOCK' : 'OFFICIAL_RULES') || !freshEvidence(rules, input)) {
-    return no('UNKNOWN', '预约规则来源、时效或范围未确认');
-  }
-  const ruleWindow = parseTimeRange(rules.appliesTo);
-  const anchor = parseInstant(rules.stepAnchorAt);
-  if (!ruleWindow || !covers(ruleWindow, window) || anchor === null ||
-      ![rules.minDurationMinutes, rules.maxDurationMinutes, rules.startStepMinutes].every(v => Number.isSafeInteger(v) && v > 0 && v <= 1440) ||
-      rules.minDurationMinutes > rules.maxDurationMinutes) {
-    return no('UNKNOWN', '规则没有覆盖完整时段或缺少可核验的时长及对齐参数');
-  }
-  const eligibility = input.eligibility;
-  if (eligibility.kind !== 'VERIFIED' || !sameSeat(eligibility.target, input.target) ||
-      eligibility.source !== (input.mode === 'MOCK' ? 'MOCK' : 'OFFICIAL_ELIGIBILITY') || !freshEvidence(eligibility, input)) {
-    return no('UNKNOWN', '本座位预约资格尚未确认');
-  }
-  const eligibilityWindow = parseTimeRange(eligibility.appliesTo);
-  if (!eligibilityWindow || !covers(eligibilityWindow, window) || typeof eligibility.eligible !== 'boolean') return no('UNKNOWN', '资格证据不覆盖整个时段');
-  if (!eligibility.eligible) return no('INELIGIBLE', '已核验证据显示不具备预约资格');
+  const {rules, anchor} = inspected;
   const duration = preferred.end - preferred.start;
   if (duration % MINUTE_MS !== 0 || duration < rules.minDurationMinutes * MINUTE_MS || duration > rules.maxDurationMinutes * MINUTE_MS) {
     return no('NO_MATCH', '原请求时长不符合已核验规则，不自动缩短或延长');

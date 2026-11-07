@@ -20,6 +20,7 @@ export interface LiveReply {
   route: string;
   live: {snapshot: LiveSnapshot; summary: {total: number; withResv: number; withoutResv: number; invalidRows: number; rooms: LiveRoomSummary[]}} | null;
   liveError: string | null;
+  networkError?: 'OFFLINE' | 'ACCESS_RESTRICTED' | null;
   domError: string | null;
   hookSeen: boolean;
   transports: ('XHR' | 'FETCH')[];

@@ -3,6 +3,7 @@ import {DEFAULT_AVAILABILITY_AGE_MS, parseInstant} from './seat-timeline';
 
 export type SeatObservationSource = 'NETWORK' | 'DOM';
 export type SeatObservationState = 'BASELINE' | 'CHANGED' | 'UNCHANGED' | 'STALE' | 'UNKNOWN' | 'SESSION_LOST' | 'SOURCE_UNAVAILABLE' | 'STOPPED';
+export type SeatObservationChangeType = 'SEAT_CHANGED' | 'TIME_CHANGED' | 'RECORD_ADDED' | 'RECORD_REMOVED' | 'STATUS_CHANGED';
 type InvalidState = 'UNKNOWN' | 'SESSION_LOST' | 'SOURCE_UNAVAILABLE';
 interface SeatIdentity {
   key: string;
@@ -30,6 +31,8 @@ export interface DomSeatFingerprintInput {
 export interface SeatObservationChange extends SeatIdentity {
   kind: 'ADDED' | 'REMOVED' | 'UPDATED';
   observedAt: string;
+  /** Independent observation differences. These never encode a booking outcome. */
+  changeTypes: readonly SeatObservationChangeType[];
 }
 export interface SeatObservationStatus {
   state: SeatObservationState;
@@ -137,9 +140,112 @@ export function fingerprintDom(rows: readonly DomSeatFingerprintInput[], observe
   return {source: 'DOM', observedAt, seats: sortedUniqueSeats(seats)};
 }
 
-function makeChange(seat: SeatIdentity, kind: SeatObservationChange['kind'], observedAt: string): SeatObservationChange {
+type NetworkParts = [
+  openStart: unknown, openEnd: unknown, devStatus: unknown, openState: unknown,
+  onlyView: unknown, position: unknown, intervals: string[],
+];
+type DomParts = [
+  classes: string[], title: string, left: string, top: string, visibleTimes: string[],
+];
+
+interface IntervalGroup {
+  count: number;
+  statuses: Map<string, number>;
+}
+
+function groupByIntervalTime(intervals: readonly string[]): Map<string, IntervalGroup> {
+  const groups = new Map<string, IntervalGroup>();
+  for (const interval of intervals) {
+    const [start, end, status] = JSON.parse(interval) as [string, string, unknown];
+    const time = JSON.stringify([start, end]);
+    const statusKey = JSON.stringify(status);
+    let group = groups.get(time);
+    if (!group) {
+      group = {count: 0, statuses: new Map()};
+      groups.set(time, group);
+    }
+    group.count++;
+    group.statuses.set(statusKey, (group.statuses.get(statusKey) ?? 0) + 1);
+  }
+  return groups;
+}
+
+function countIdenticalStatuses(before: IntervalGroup, after: IntervalGroup): number {
+  let equal = 0;
+  for (const [status, count] of before.statuses) {
+    equal += Math.min(count, after.statuses.get(status) ?? 0);
+  }
+  return equal;
+}
+
+function compareNetworkParts(before: NetworkParts, after: NetworkParts): SeatObservationChangeType[] {
+  const changes: SeatObservationChangeType[] = [];
+  const openingChanged = JSON.stringify(before.slice(0, 2)) !== JSON.stringify(after.slice(0, 2));
+  const seatStatusChanged = JSON.stringify(before.slice(2, 5)) !== JSON.stringify(after.slice(2, 5));
+  if (JSON.stringify(before[5]) !== JSON.stringify(after[5])) changes.push('SEAT_CHANGED');
+
+  const oldIntervals = groupByIntervalTime(before[6]);
+  const newIntervals = groupByIntervalTime(after[6]);
+  let added = false;
+  let removed = false;
+  let intervalStatusChanged = false;
+  for (const [time, current] of newIntervals) {
+    const previous = oldIntervals.get(time);
+    if (!previous) {
+      added = true;
+      continue;
+    }
+    if (current.count > previous.count) added = true;
+    if (current.count < previous.count) removed = true;
+    if (countIdenticalStatuses(previous, current) < Math.min(previous.count, current.count)) {
+      intervalStatusChanged = true;
+    }
+  }
+  if ([...oldIntervals.keys()].some(time => !newIntervals.has(time))) removed = true;
+
+  // Without reservation identity, changed time pairs are observed additions/removals.
+  // A replacement changes the time set, without identifying a rescheduled booking.
+  if (openingChanged || added && removed) changes.push('TIME_CHANGED');
+  if (added) changes.push('RECORD_ADDED');
+  if (removed) changes.push('RECORD_REMOVED');
+  if (seatStatusChanged || intervalStatusChanged) changes.push('STATUS_CHANGED');
+  return changes;
+}
+
+function titleTimes(title: string): string[] {
+  return (title.match(/\b(?:\d{4}-\d{2}-\d{2}[ T])?(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?\b/g) ?? [])
+    .sort(lexical);
+}
+
+function compareDomParts(before: DomParts, after: DomParts): SeatObservationChangeType[] {
+  const changes: SeatObservationChangeType[] = [];
+  if (JSON.stringify(before.slice(0, 4)) !== JSON.stringify(after.slice(0, 4))) changes.push('SEAT_CHANGED');
+  if (JSON.stringify(before[4]) !== JSON.stringify(after[4])
+    || JSON.stringify(titleTimes(before[1])) !== JSON.stringify(titleTimes(after[1]))) {
+    changes.push('TIME_CHANGED');
+  }
+  // DOM presentation alone cannot establish record membership or reservation status.
+  return changes;
+}
+
+function compareFingerprints(source: SeatObservationSource, before: SeatFingerprint, after: SeatFingerprint): SeatObservationChangeType[] {
+  return source === 'NETWORK'
+    ? compareNetworkParts(JSON.parse(before.canonical) as NetworkParts, JSON.parse(after.canonical) as NetworkParts)
+    : compareDomParts(JSON.parse(before.canonical) as DomParts, JSON.parse(after.canonical) as DomParts);
+}
+
+function makeChange(
+  seat: SeatIdentity,
+  kind: SeatObservationChange['kind'],
+  observedAt: string,
+  changeTypes: readonly SeatObservationChangeType[] = ['SEAT_CHANGED'],
+): SeatObservationChange {
   const {key, name, roomId, devId} = seat;
-  return {key, name, roomId, devId, kind, observedAt};
+  return {key, name, roomId, devId, kind, observedAt, changeTypes};
+}
+
+function copyChange(change: SeatObservationChange): SeatObservationChange {
+  return {...change, changeTypes: [...change.changeTypes]};
 }
 
 /** In-memory comparison and freshness for one channel and one page scope. Owns no timer or request. */
@@ -183,7 +289,7 @@ export class SeatObservationMonitor {
       state, reason, source: this.latest?.source ?? null, lastFreshAt: this.latest?.at ?? null, lastChangedAt: this.lastChangedAt,
       freshness: stale ? 'STALE' : validState && validClock && !this.stopped && this.latest ? 'FRESH' : 'UNKNOWN',
       accepted, duplicate, seatCount: this.latest?.seats.size ?? 0, observationCount: this.observationCount, eventCount: this.eventCount,
-      changes: changes.map(change => ({...change})),
+      changes: changes.map(copyChange),
     };
   }
 
@@ -215,16 +321,24 @@ export class SeatObservationMonitor {
       const same = seats.size === this.latest.seats.size && [...seats].every(([key, seat]) => this.latest?.seats.get(key)?.canonical === seat.canonical);
       return same ? this.result(now, false, true) : this.invalidate('UNKNOWN', '同一捕获时刻出现不一致的座位数据', now);
     }
+    const baseline = !this.latest || this.sessionLostAt !== null;
     const changes: SeatObservationChange[] = [];
-    if (this.latest) {
+    if (!baseline && this.latest) {
       for (const [key, seat] of seats) {
         const old = this.latest.seats.get(key);
         if (!old) changes.push(makeChange(seat, 'ADDED', frame.observedAt));
-        else if (old.canonical !== seat.canonical) changes.push(makeChange(seat, 'UPDATED', frame.observedAt));
+        else if (old.canonical !== seat.canonical) {
+          let types: SeatObservationChangeType[];
+          try {
+            types = compareFingerprints(frame.source, old, seat);
+          } catch {
+            return this.invalidate('UNKNOWN', '座位观察字段无法比较', now);
+          }
+          if (types.length) changes.push(makeChange(seat, 'UPDATED', frame.observedAt, types));
+        }
       }
       for (const [key, seat] of this.latest.seats) if (!seats.has(key)) changes.push(makeChange(seat, 'REMOVED', frame.observedAt));
     }
-    const baseline = !this.latest || this.sessionLostAt !== null;
     this.latest = {source: frame.source, at: frame.observedAt, ms, seats};
     this.sessionLostAt = null;
     this.observationCount++;
@@ -261,7 +375,7 @@ export class SeatObservationMonitor {
   }
   lastChangeFor(key: string): SeatObservationChange | null {
     const change = this.changesBySeat.get(key);
-    return change ? {...change} : null;
+    return change ? copyChange(change) : null;
   }
   stop(): void {this.stopped = true}
   reset(): void {

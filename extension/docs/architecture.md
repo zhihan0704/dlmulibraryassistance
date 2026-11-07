@@ -9,9 +9,13 @@
 | `seat-observation.ts` | 按座位比较字段、去重、判断新鲜度和会话状态 |
 | `live-panel.ts` | 读取当前标签缓存，展示观察来源、时间、错误、座位和变化 |
 | `daily-booking-controller.ts`、`daily-booking-db.ts` | 每日提醒、浏览器闹钟重建、辅助核对、会话暂停和事务去重 |
+| `assistant-controller.ts`、`runtime-health.ts` | 连接与异常判定、运行事件、日期计划提醒、只读预约核验 |
+| `intelligent-booking.ts` | 以完整时间轴、规则和资格为门槛，按座位与时间偏好排序 |
+| `assistant-repository.ts`、`daily-database.ts` | 在既有每日任务数据库内迁移并保存偏好、计划、诊断摘要和有限日志 |
+| `assistant-panel.ts` | 日期计划、预约偏好、候选解释、运行状态、日志及备份 |
 | `product-controller.ts`、`product-db.ts` | 本地预约与现场签到准备、二维码交接、提醒和核验历史 |
 | `alarm-manager.ts`、`task-manager.ts` | 历史本地模拟预约流程和测试 |
 
-每日任务使用北京时间 07:55、08:00、08:01 的单次浏览器闹钟，按次日使用日期计算。Windows 任务请求在 07:55 打开学校首页。两者的唤醒条件独立。Worker 重启从 IndexedDB 读设置和领取记录，并重建未来闹钟。
+每日任务使用北京时间 07:55、08:00、08:01 的单次浏览器闹钟，按次日使用日期计算。Windows 任务请求在 07:55 打开学校首页。两者的唤醒条件独立。Worker 重启从 IndexedDB 读设置和领取记录，并重建未来闹钟。多日期计划使用一个最近到期的本地闹钟，到期后计算下一次提醒。事件和桌面通知各自通过数据库事务领取去重。
 
 当前为辅助模式。预约资格与时段规则仍需学校证据。空档算法按 `[start,end)` 计算，要求可信来源、完整覆盖、新鲜度和已核验规则。现有响应没有提供足够证据用于动态推荐。详见[实时监听架构](realtime-monitoring-architecture.md)与[数据通道](live-data-channel.md)。

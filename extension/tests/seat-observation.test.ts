@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {normalizeReservePayload, summarizeSnapshot} from '../src/core/live-seats';
-import {domSeatKey, fingerprintDom, fingerprintNetwork, networkSeatKey, SeatObservationMonitor, type DomSeatFingerprintInput} from '../src/core/seat-observation';
+import {domSeatKey, fingerprintDom, fingerprintNetwork, networkSeatKey, SeatObservationMonitor, type DomSeatFingerprintInput, type SeatObservationChangeType} from '../src/core/seat-observation';
 
 const start = Date.parse('2026-11-06T10:00:00+08:00');
 const at = (offset = 0) => new Date(start + offset).toISOString();
@@ -30,7 +30,10 @@ test('one reservation changes time while all 152 seat and booking-count aggregat
   assert.equal(monitor.observe(fingerprintNetwork(before), start).state, 'BASELINE');
   const update = monitor.observe(fingerprintNetwork(after), start+1000);
   assert.equal(update.state, 'CHANGED');
-  assert.deepEqual(update.changes, [{key:networkSeatKey(roomId,10042,'1D-043'),name:'1D-043',roomId,devId:10042,kind:'UPDATED',observedAt:at(1000)}]);
+  assert.deepEqual(update.changes, [{
+    key:networkSeatKey(roomId,10042,'1D-043'), name:'1D-043', roomId, devId:10042,
+    kind:'UPDATED', observedAt:at(1000), changeTypes:['TIME_CHANGED','RECORD_ADDED','RECORD_REMOVED'],
+  }]);
   assert.equal(update.eventCount, 1);
   assert.deepEqual(monitor.lastChangeFor(networkSeatKey(roomId,10042,'1D-043')), update.changes[0]);
   assert.equal(monitor.lastChangeFor(networkSeatKey(roomId,10041,'1D-042')), null);
@@ -67,11 +70,16 @@ test('uninterpreted raw status and opening time are individually compared', () =
   monitor.observe(fingerprintNetwork(before),start);
   const after = normalizeReservePayload(rows().slice(0,1),at(1000));
   after.seats[0].resvIntervals[0].rawResvStatus = 'NOT_VERIFIED';
-  assert.equal(monitor.observe(fingerprintNetwork(after),start+1000).state,'CHANGED');
+  const changedStatus = monitor.observe(fingerprintNetwork(after),start+1000);
+  assert.equal(changedStatus.state,'CHANGED');
+  assert.deepEqual(changedStatus.changes[0].changeTypes, ['STATUS_CHANGED']);
+  assert.doesNotMatch(JSON.stringify(changedStatus), /NOT_VERIFIED|09:00:00|canonical/);
   const changedOpening = normalizeReservePayload(rows().slice(0,1),at(2000));
   changedOpening.seats[0].resvIntervals[0].rawResvStatus = 'NOT_VERIFIED';
   changedOpening.seats[0].openEnd = '21:00';
-  assert.equal(monitor.observe(fingerprintNetwork(changedOpening),start+2000).state,'CHANGED');
+  const changedBounds = monitor.observe(fingerprintNetwork(changedOpening),start+2000);
+  assert.equal(changedBounds.state,'CHANGED');
+  assert.deepEqual(changedBounds.changes[0].changeTypes, ['TIME_CHANGED']);
 });
 
 test('network identity includes room, device and seat code', () => {
@@ -81,6 +89,45 @@ test('network identity includes room, device and seat code', () => {
   const moved = [{...before[0], roomId:roomId+1}];
   const result = monitor.observe(fingerprintNetwork(normalizeReservePayload(moved,at(1000))),start+1000);
   assert.deepEqual(result.changes.map(c=>[c.roomId,c.kind]),[[roomId+1,'ADDED'],[roomId,'REMOVED']]);
+  assert.deepEqual(result.changes.map(c=>c.changeTypes),[['SEAT_CHANGED'],['SEAT_CHANGED']]);
+});
+
+test('observed interval addition and disappearance stay separate even with duplicate time pairs', () => {
+  const monitor = new SeatObservationMonitor();
+  const [seat] = rows();
+  monitor.observe(fingerprintNetwork(normalizeReservePayload([seat], at())), start);
+  const sameTime = {...seat.resvInfo[0], resvStatus: 11};
+  seat.resvInfo.push(sameTime);
+  const addition = monitor.observe(fingerprintNetwork(normalizeReservePayload([seat], at(1000))), start+1000);
+  assert.deepEqual(addition.changes[0].changeTypes, ['RECORD_ADDED']);
+
+  // Keeping the original 11 status while removing a different duplicate is not a status change.
+  seat.resvInfo.shift();
+  const removal = monitor.observe(fingerprintNetwork(normalizeReservePayload([seat], at(2000))), start+2000);
+  assert.deepEqual(removal.changes[0].changeTypes, ['RECORD_REMOVED']);
+  assert.doesNotMatch(JSON.stringify(removal), /CANCEL|取消|占用|签到/);
+  seat.resvInfo.reverse();
+  assert.equal(monitor.observe(fingerprintNetwork(normalizeReservePayload([seat], at(3000))), start+3000).state,'UNCHANGED');
+});
+
+test('multiple independent changes coexist without exporting fingerprint or mutable remembered events', () => {
+  const monitor = new SeatObservationMonitor();
+  const [seat] = rows();
+  monitor.observe(fingerprintNetwork(normalizeReservePayload([seat], at())), start);
+  seat.coordinate = '3,5';
+  seat.openEnd = '21:15';
+  seat.openState = 0;
+  seat.resvInfo.push({startTime:'2026-11-06 17:00:00', endTime:'2026-11-06 18:00:00', resvStatus: 42});
+  const update = monitor.observe(fingerprintNetwork(normalizeReservePayload([seat], at(1000))), start+1000);
+  assert.deepEqual(update.changes[0].changeTypes, ['SEAT_CHANGED','TIME_CHANGED','RECORD_ADDED','STATUS_CHANGED']);
+  assert.doesNotMatch(JSON.stringify(update), /21:15|17:00:00|canonical|resvStatus/);
+
+  const key = networkSeatKey(roomId, seat.devId, seat.devName);
+  (update.changes[0].changeTypes as SeatObservationChangeType[]).length = 0;
+  const remembered = monitor.lastChangeFor(key)!;
+  assert.equal(remembered.changeTypes.length, 4);
+  (remembered.changeTypes as SeatObservationChangeType[]).length = 0;
+  assert.equal(monitor.lastChangeFor(key)?.changeTypes.length, 4);
 });
 
 test('DOM class order, row order, time order, and equivalent position formatting are canonical', () => {
@@ -99,9 +146,21 @@ test('DOM title and visible time changes are detected per seat without returning
   assert.equal(result.state,'CHANGED');
   assert.equal(result.changes[0].key,domSeatKey('1D-001'));
   assert.equal(result.changes.length,1);
+  assert.deepEqual(result.changes[0].changeTypes,['SEAT_CHANGED']);
   assert.doesNotMatch(JSON.stringify(result),/RAW TITLE|canonical/);
   const another = monitor.observe(fingerprintDom([{...first[0],title:'RAW TITLE ONLY IN LOCAL COMPARISON',visibleTimes:['09:30','10:00']},first[1]],at(2000)),start+2000);
   assert.equal(another.state,'CHANGED');
+  assert.deepEqual(another.changes[0].changeTypes,['TIME_CHANGED']);
+});
+
+test('DOM title time and class changes report presentation evidence only', () => {
+  const monitor = new SeatObservationMonitor();
+  const seat = {...domRow('D1-01'), title:'页面提示 09:00–10:00'};
+  monitor.observe(fingerprintDom([seat], at()), start);
+  const updated = {...seat, title:'页面提示 09:30–10:00', className:'draggable yellow'};
+  const result = monitor.observe(fingerprintDom([updated], at(1000)), start+1000);
+  assert.deepEqual(result.changes[0].changeTypes, ['SEAT_CHANGED','TIME_CHANGED']);
+  assert.doesNotMatch(JSON.stringify(result), /页面提示|yellow|09:30|canonical/);
 });
 
 test('unavailable and unknown source retain last sample time but clear its freshness', () => {

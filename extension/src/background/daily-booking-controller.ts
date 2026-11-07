@@ -4,6 +4,8 @@ import {DlmuAdapter} from '../adapters/dlmu-adapter';
 import {OFFICIAL_HOME, OFFICIAL_PERSONAL, officialSeatRoute,
   type DailySeatIdentity} from '../core/daily-observations';
 import type {OfficialReservation} from '../core/product-model';
+import type {RuntimeEventType} from '../core/runtime-health';
+import type {SeatTarget} from '../core/seat-timeline';
 import {DailyBookingRepository, type DailyResult, type DailyState} from '../storage/daily-booking-db';
 
 const ALARM_PREFIX = 'dlmu-daily:';
@@ -40,7 +42,7 @@ async function getTab(id: number | undefined): Promise<chrome.tabs.Tab | null> {
   try { return await chrome.tabs.get(id); } catch { return null; }
 }
 
-async function readTab<T>(tab: chrome.tabs.Tab, message: object, expectedHash: string): Promise<T | null> {
+export async function readTab<T>(tab: chrome.tabs.Tab, message: object, expectedHash: string): Promise<T | null> {
   if (tab.id === undefined || tab.discarded || tab.status === 'loading' || !isOfficial(tab, expectedHash)) return null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -59,7 +61,7 @@ async function readTab<T>(tab: chrome.tabs.Tab, message: object, expectedHash: s
   }
 }
 
-async function readSeat(tab: chrome.tabs.Tab, roomName: string, seatCode: string): Promise<DailySeatIdentity | null> {
+export async function readSeat(tab: chrome.tabs.Tab, roomName: string, seatCode: string): Promise<DailySeatIdentity | null> {
   const hash = hashOf(tab.url);
   if (!hash || !isOfficial(tab)) return null;
   const response = await readTab<{seat: DailySeatIdentity | null}>(tab, {type: 'READ_DAILY_SEAT', roomName, seatCode}, hash);
@@ -70,7 +72,7 @@ async function readSeat(tab: chrome.tabs.Tab, roomName: string, seatCode: string
   return seat;
 }
 
-async function readPersonal(tab: chrome.tabs.Tab, now: () => number, notBefore: number): Promise<{rows: OfficialReservation[]; observedAt: number} | null> {
+export async function readPersonal(tab: chrome.tabs.Tab, now: () => number, notBefore: number): Promise<{rows: OfficialReservation[]; observedAt: number} | null> {
   const reply = await readTab<{ok: boolean; rows: OfficialReservation[]; issues: string[]; observedAt: string; route: string}>(
     tab, {type: 'READ_MY_RESERVATIONS'}, PERSONAL_HASH,
   );
@@ -84,9 +86,9 @@ async function readPersonal(tab: chrome.tabs.Tab, now: () => number, notBefore: 
 }
 
 async function inspect(state: DailyState, schedule: DailySchedule, phase: DailyPhase, tabs: chrome.tabs.Tab[],
-  now: () => number, navigate: (url: string, windowId?: number) => Promise<void>, canRead: () => Promise<boolean>): Promise<DailyResult> {
-  const result = (message: string, pending = false): DailyResult =>
-    ({phase, day: schedule.day, targetDate: schedule.target.date, at: now(), message, pending});
+  now: () => number, navigate: (url: string, windowId?: number) => Promise<void>, canRead: () => Promise<boolean>): Promise<DailyResult & {verified?: boolean}> {
+  const result = (message: string, pending = false, verified = false) =>
+    ({phase, day: schedule.day, targetDate: schedule.target.date, at: now(), message, pending, verified});
   if (state.session && state.session.verifiedAt === undefined || !await canRead()) {
     return result('等待人工登录及个人预约复核。请完成认证后打开学校个人预约页。', true);
   }
@@ -96,7 +98,7 @@ async function inspect(state: DailyState, schedule: DailySchedule, phase: DailyP
     const sample = personal && await readPersonal(personal, now, schedule.openAt);
     // An absent row may be filtered, paginated or not loaded. Absence is not proof of no booking.
     const count = sample && DlmuAdapter.matchReservation(schedule.target, sample.rows);
-    if (count === 1) return result('官方个人预约页显示同一日期、区域、座位和时段已有有效预约。');
+    if (count === 1) return result('官方个人预约页显示同一日期、区域、座位和时段已有有效预约。', false, true);
     if (count && count > 1) return result('官方个人预约页出现多条匹配记录，请人工核对。');
   }
   const roomUrl = officialSeatRoute(roomId);
@@ -117,7 +119,10 @@ async function inspect(state: DailyState, schedule: DailySchedule, phase: DailyP
   return result('已到预约提醒时间。生产提交条件仍需核实，请在学校网页核对并确认预约。');
 }
 
-export function installDailyBookingController(repository: DailyStore = new DailyBookingRepository(), now: () => number = Date.now): void {
+type DailyReport = (eventType: RuntimeEventType, at: number, dedupKey?: string, seat?: SeatTarget) => void;
+
+export function installDailyBookingController(repository: DailyStore = new DailyBookingRepository(), now: () => number = Date.now,
+  report: DailyReport = () => {}): void {
   let queue: Promise<unknown> = Promise.resolve();
   const serial = <T>(operation: () => Promise<T>) => {
     const pending = queue.then(operation);
@@ -135,7 +140,10 @@ export function installDailyBookingController(repository: DailyStore = new Daily
     }
   }
   async function markLost(): Promise<void> {
-    if (await repository.markSessionLost(now())) await notifySession();
+    if (await repository.markSessionLost(now())) {
+      report('SESSION_LOST', now());
+      await notifySession();
+    }
   }
 
   async function reconcile(): Promise<void> {
@@ -169,6 +177,8 @@ export function installDailyBookingController(repository: DailyStore = new Daily
     const key = `${schedule.day}|${state.id}|${schedule.duplicateKey}|${phase}`;
     const token = await repository.claim(revision, key, now());
     if (!token) return;
+    const seat = {roomId: Number(state.config.target.roomId), devId: Number(state.config.target.seatId), seatCode: state.config.target.seatCode};
+    report('TASK_STARTED', now(), `start:${key}`, seat);
     const navigate = async (url: string, windowId?: number) => {
       if (scheduledTime === undefined || !isDailyPhaseWindow(schedule, phase, now())) return;
       if (!await repository.reserveNavigation(revision, key, token, now()) || !isDailyPhaseWindow(schedule, phase, now())) return;
@@ -179,9 +189,10 @@ export function installDailyBookingController(repository: DailyStore = new Daily
       return current?.revision === revision && current.config.enabled &&
         (!current.session || current.session.verifiedAt !== undefined);
     };
-    let result: DailyResult;
+    let result: DailyResult & {verified?: boolean};
     try { result = await inspect(state, schedule, phase, tabs, now, navigate, canRead); }
     catch {
+      report('TASK_FAILED', now(), `failure:${key}`, seat);
       result = {phase, day: schedule.day, targetDate: schedule.target.date, at: now(), message: '读取学校页面失败，预约结果待人工核对。', pending: true};
     }
     if (!isDailyPhaseWindow(schedule, phase, now())) return;
@@ -190,7 +201,11 @@ export function installDailyBookingController(repository: DailyStore = new Daily
       chrome.notifications.create('dlmu-daily-' + schedule.day, {type: 'basic', iconUrl: 'icons/icon128.png',
         title: `次日预约提醒 · ${schedule.target.date}`, message: result.message}, () => { void chrome.runtime.lastError; });
     }
-    if (finished.saved) notify();
+    if (finished.saved) {
+      if (result.verified) report('RESERVATION_VERIFIED', result.at, `verified:${key}`, seat);
+      else if (phase === 'VERIFY') report('RESERVATION_UNVERIFIED', result.at, `unverified:${key}`, seat);
+      notify();
+    }
   }
 
   async function resumeSession(tabId: number): Promise<void> {
@@ -202,7 +217,10 @@ export function installDailyBookingController(repository: DailyStore = new Daily
     if (active.some(candidate => isLoginTab(candidate))) return;
     const sample = await readPersonal(tab, now, gate.lostAt + 1);
     // A clean nonempty table supplies affirmative post-login evidence. A skeleton table does not.
-    if (sample?.rows.length && await repository.confirmSession(gate.lostAt, sample.observedAt)) await notifySession();
+    if (sample?.rows.length && await repository.confirmSession(gate.lostAt, sample.observedAt)) {
+      report('SESSION_RECOVERED', sample.observedAt);
+      await notifySession();
+    }
   }
 
   let queuedObservation = false;
@@ -295,8 +313,10 @@ export function installDailyBookingController(repository: DailyStore = new Daily
           target: {floorName, roomName, seatCode, startTime, endTime, roomId: seat.roomId, seatId: seat.seatId, dayOffset: 1}}));
       }
       if (message.type === 'DAILY_TOGGLE') {
-        if (typeof message.enabled !== 'boolean' || !(await repository.get())) throw Error('请先核对并保存固定座位');
+        const previous = await repository.get();
+        if (typeof message.enabled !== 'boolean' || !previous) throw Error('请先核对并保存固定座位');
         await repository.setEnabled(message.enabled);
+        if (previous.config.enabled !== message.enabled) report(message.enabled ? 'TASK_RESUMED' : 'TASK_PAUSED', now());
       }
       const state = await repository.get();
       if (message.type === 'DAILY_OPEN') {

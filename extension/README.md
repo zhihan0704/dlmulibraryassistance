@@ -1,8 +1,10 @@
-# DLMU Library Assistant 2.1
+# DLMU Library Assistant 2.2
 
-侧栏「实时监听」对学校网页自然收到的响应和前台座位 DOM 分别做逐座位比较。总数相同也能发现时段变化。界面显示北京时间下的捕获、观察、最近变化和过期状态。「读取当前页面缓存」不重新加载学校页面。识别认证中断后暂停有效观察，完成学校人工登录并读取有效个人预约后，从新的座位数据重新建立基线。
+侧栏可以保存预约偏好、按北京时间分别规划多个日期，并核对本人已有的学校预约。智能空档建议按座位优先级、首选时段和可调整范围比较。规则、资格、时间覆盖或新鲜度不明时，结果保持待核验。[智能空档与计划指南](docs/intelligent-booking-guide.md)
 
-2.1 仍为辅助模式。真实座位的可预约性、WebSocket / SSE、实际启动与唤醒等待人工核验。扩展不提交预约，也不发起主动监测请求。参见[架构](docs/realtime-monitoring-architecture.md)、[人工验证](docs/live-data-channel.md)和[验收](reports/realtime-monitoring-acceptance.md)。
+「实时监听」比较学校网页自然收到的响应和前台座位 DOM，可区分时段变化、记录增减和原始状态值变化。「运行状态」单独展示后台、页面、会话、数据库、闹钟与数据有效性。运行日志可按日期、座位或任务查询和导出。新版桌面通知由用户开启。[运行健康指南](docs/runtime-health-guide.md)
+
+2.2 为辅助模式，正式自动预约关闭。请按原扩展路径升级，以保留 Edge 配置中的数据。[安装与升级](docs/v2.2-upgrade.md) · [验收报告](reports/v2.2-acceptance.md)
 
 ## 每日固定座位预约助手
 
@@ -50,7 +52,7 @@ Android浏览器菜单选择安装/添加主屏幕；iPhone使用Safari分享→
 
 `npm ci` 安装锁定依赖；`npm run verify` 运行单元测试、严格类型检查、两端构建和扩展校验。`npm run test:product`、`npm run test:mobile`、`npm run test:extension-product` 运行真实Edge+本地合成数据集成测试。`npm run test:e2e`及`npm run test:restart`保留历史回归。默认在Windows官方Edge路径，可设置EDGE_PATH。测试独立配置用于验证，不作为产品登录环境。
 
-构建后用 `npm run test:daily:edge` 验证 2.0 的 Edge 集成。需要本地研究证据的四个历史测试文件仍保留。设置 `DLMU_LEGACY_ROOT` 为原项目目录后运行 `npm run test:history`，新版测试只读引用原证据，无需把研究目录复制到公开仓库。
+构建后用 `npm run test:daily:edge` 验证每日提醒集成，用 `npm run test:assistant:storage` 验证新版数据库迁移、隔离和备份，用 `npm run test:assistant:panel` 验证侧栏、日期计划、只读核验和恢复。需要本地研究证据的四个历史测试文件仍保留。设置 `DLMU_LEGACY_ROOT` 为原项目目录后运行 `npm run test:history`，新版测试只读引用原证据。
 
 `npm run serve:mobile`只启动本机预览 http://localhost:4173，不对局域网开放，也不能替代手机HTTPS托管。
 

@@ -1,5 +1,7 @@
 import {installProductController} from './product-controller';
 import {installDailyBookingController} from './daily-booking-controller';
+import {installAssistantController} from './assistant-controller';
+import {DailyBookingRepository} from '../storage/daily-booking-db';
 import {getRecovery,resetAfterStartup} from './recovery-storage';
 import {manage} from './task-manager';
 let queue:Promise<unknown>=Promise.resolve();const serial=(m:any)=>{const result=queue.then(()=>manage(m));queue=result.catch(()=>{});return result};
@@ -11,4 +13,6 @@ chrome.runtime.onStartup.addListener(()=>{void resetAfterStartup()});
 chrome.runtime.onMessage.addListener((m,s,reply)=>{if(s.id!==chrome.runtime.id||m?.type!=='RECOVERY_STATUS')return;getRecovery().then(task=>reply({ok:true,task}),()=>reply({ok:false}));return true});
 
 installProductController();
-installDailyBookingController();
+const daily = new DailyBookingRepository();
+const reportDaily = installAssistantController(daily);
+installDailyBookingController(daily, Date.now, reportDaily);

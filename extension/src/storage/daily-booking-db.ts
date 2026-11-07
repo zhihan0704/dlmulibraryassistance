@@ -1,4 +1,5 @@
 import type {DailyBookingConfig, DailyPhase} from '../core/daily-booking-scheduler';
+import {DAILY_DATABASE_NAME, openDailyDatabase} from './daily-database';
 
 export interface DailyResult {
   phase: DailyPhase;
@@ -58,16 +59,9 @@ function completed(tx: IDBTransaction): Promise<void> {
 }
 
 export class DailyBookingRepository {
-  private readonly database: Promise<IDBDatabase>;
+  constructor(private readonly name = DAILY_DATABASE_NAME) {}
 
-  constructor(name = 'dlmu-daily-booking-v2') {
-    const open = indexedDB.open(name, 1);
-    open.onupgradeneeded = () => {
-      open.result.createObjectStore('state', {keyPath: 'id'});
-      open.result.createObjectStore('claims', {keyPath: 'id'});
-    };
-    this.database = request(open);
-  }
+  private get database(): Promise<IDBDatabase> { return openDailyDatabase(this.name); }
 
   async get(): Promise<DailyState | undefined> {
     const store = (await this.database).transaction('state').objectStore('state');

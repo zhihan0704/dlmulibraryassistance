@@ -18,6 +18,7 @@ function observePage(): void {
   let live: LiveSnapshot | null = null;
   let lastDom: DomSummary | null = null;
   let liveError: string | null = null;
+  let networkError: LiveReply['networkError'] = navigator.onLine === false ? 'OFFLINE' : null;
   let domError: string | null = null;
   let lastCapturedAt: string | null = null;
   let page = initialPage;
@@ -29,16 +30,26 @@ function observePage(): void {
   let personalKey = '';
   let debounce: number | undefined;
   let domRunning = false;
+  let staleTimer: number | undefined;
 
   function notify() {
     void chrome.runtime.sendMessage({type: 'LIVE_UPDATE'}).catch(() => {});
   }
 
+  function reportObservation(eventType: 'DATA_CAPTURED' | 'PARSER_ERROR' | 'NETWORK_ERROR' | 'DATA_STALE',
+    source: 'NETWORK' | 'DOM', at: string, seatCount?: number, changes: unknown[] = []) {
+    if (page.kind !== 'SEATS') return;
+    void chrome.runtime.sendMessage({type: 'ASSISTANT_OBSERVATION', eventType, source, route: page.route,
+      at, seatCount, changes: changes.slice(0, 2000)}).catch(() => {});
+  }
+
   function resetData() {
+    window.clearTimeout(staleTimer);
     live = null;
     lastDom = null;
     lastCapturedAt = null;
     liveError = null;
+    networkError = navigator.onLine === false ? 'OFFLINE' : null;
     domError = null;
     network.reset();
     dom.reset();
@@ -64,6 +75,7 @@ function observePage(): void {
     const resumed = session === 'SESSION_LOST';
     session = value;
     if (value === 'SESSION_LOST') {
+      window.clearTimeout(staleTimer);
       network.invalidate('SESSION_LOST');
       dom.invalidate('SESSION_LOST');
     } else if (resumed) {
@@ -82,9 +94,12 @@ function observePage(): void {
     setSession(reply.lost ? 'SESSION_LOST' : reply.verified ? 'REVERIFIED' : 'UNKNOWN');
   }
 
-  function captureError(message: string) {
+  function captureError(message: string, error: LiveReply['networkError'] = null) {
+    const changed = liveError !== message || networkError !== error;
     liveError = message;
+    networkError = error;
     network.invalidate('UNKNOWN', message);
+    if (changed) reportObservation(error ? 'NETWORK_ERROR' : 'PARSER_ERROR', 'NETWORK', new Date().toISOString());
     notify();
   }
 
@@ -117,8 +132,8 @@ function observePage(): void {
       void chrome.runtime.sendMessage({type: 'DAILY_SESSION_LOST'}).catch(() => {});
       return;
     }
-    if (session === 'SESSION_LOST' || at < recoveryCutoff) { notify(); return; }
-    if (data.httpStatus === 403) { captureError('学校页面返回访问受限（403），当前数据待核验'); return; }
+    if (session === 'SESSION_LOST' || navigator.onLine === false || at < recoveryCutoff) { notify(); return; }
+    if (data.httpStatus === 403) { captureError('学校页面返回访问受限（403），当前数据待核验', 'ACCESS_RESTRICTED'); return; }
     if (data.observationError || typeof data.body !== 'string' || data.body.length > 4 * 1024 * 1024) {
       captureError('响应无法解析或超过大小限制');
       return;
@@ -126,7 +141,19 @@ function observePage(): void {
     try {
       const next = DlmuAdapter.parseSeatResponse(data.body, data.at, page);
       const observed = network.observe(fingerprintNetwork(next));
-      if (observed.accepted) { live = next; liveError = null; }
+      if (observed.accepted) {
+        live = next;
+        liveError = null;
+        networkError = null;
+        reportObservation('DATA_CAPTURED', 'NETWORK', next.capturedAt, next.seats.length, observed.changes);
+        window.clearTimeout(staleTimer);
+        staleTimer = window.setTimeout(() => {
+          if (active && session !== 'SESSION_LOST' && network.status(Date.now()).state === 'STALE') {
+            reportObservation('DATA_STALE', 'NETWORK', next.capturedAt);
+            notify();
+          }
+        }, Math.max(1, at + LIVE_MAX_AGE_MS + 10 - Date.now()));
+      }
       notify();
     } catch {
       captureError('座位响应结构或区域校验失败');
@@ -150,6 +177,7 @@ function observePage(): void {
     if (observation.accepted) {
       lastDom = {at, route: page.route, roomTitle, count: rows.length, classCounts, withFreeIntervals};
       domError = null;
+      if (observation.state !== 'UNCHANGED' || wasInvalid) reportObservation('DATA_CAPTURED', 'DOM', at, rows.length, observation.changes);
     }
     if (observation.state === 'BASELINE' || observation.state === 'CHANGED' || wasInvalid && observation.accepted) notify();
     return lastDom;
@@ -172,7 +200,11 @@ function observePage(): void {
     catch {
       const error = '座位区域尚未就绪或页面结构异常';
       dom.invalidate('UNKNOWN', error);
-      if (domError !== error) { domError = error; notify(); }
+      if (domError !== error) {
+        domError = error;
+        reportObservation('PARSER_ERROR', 'DOM', new Date().toISOString());
+        notify();
+      }
     }
   }
 
@@ -206,7 +238,7 @@ function observePage(): void {
         Number.isSafeInteger(message.seatId) && typeof message.seatCode === 'string' && message.seatCode.length <= 32;
       const networkState = network.status(now), domState = dom.status(now);
       const response: LiveReply = {ok: true, route: page.route, live: live ? {snapshot: live, summary: summarizeSnapshot(live)} : null,
-        liveError, domError, hookSeen: transports.length > 0, transports, capturedCount: capturedBy.XHR + capturedBy.FETCH,
+        liveError, networkError, domError, hookSeen: transports.length > 0, transports, capturedCount: capturedBy.XHR + capturedBy.FETCH,
         capturedBy, lastCapturedAt, session, domRunning: domRunning && page.kind === 'SEATS', dom: lastDom,
         eventMonitor: {network: networkState, dom: domState, events: networkState.eventCount + domState.eventCount},
         selected: {network: selected ? network.lastChangeFor(networkSeatKey(message.roomId, message.seatId, message.seatCode)) : null,
@@ -243,8 +275,19 @@ function observePage(): void {
   window.addEventListener('hashchange', syncRoute);
   window.addEventListener('popstate', syncRoute);
   document.addEventListener('visibilitychange', () => { syncRoute(); connectObserver(); notify(); });
+  window.addEventListener('offline', () => {
+    window.clearTimeout(staleTimer);
+    captureError('当前浏览器处于离线状态', 'OFFLINE');
+  });
+  window.addEventListener('online', () => {
+    resetData();
+    scheduleRead();
+    void checkSession();
+    notify();
+  });
   window.addEventListener('pagehide', () => {
     active = false;
+    window.clearTimeout(staleTimer);
     network.stop();
     dom.stop();
     connectObserver();
